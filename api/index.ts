@@ -1,97 +1,70 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
-import { createClient } from '@supabase/supabase-js';
-import "dotenv/config";
+import dotenv from "dotenv";
+import { connectDB } from "./dataBase";
+import client from "./dataBase";
+import { sendRecoveryEmail } from "./email";
+
+dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
+
+app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:5173" }));
 app.use(express.json());
 
-const supabaseUrl = process.env.SUPABASE_URL || 'https://db.bkvcemcsijozbbbbtpnp.supabase.co';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || 'MovieWave750018@';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Conectar base de datos
+connectDB();
 
-// Función para verificar la conexión a Supabase
-async function checkSupabaseConnection() {
-  try {
-    const { data, error } = await supabase.from('users').select('*').limit(1);  // Intenta seleccionar un registro de prueba
-    if (error) {
-      console.error('Error de conexión a Supabase:', error.message);
-      return false;
-    }
-    console.log('Conexión a Supabase exitosa. Datos recuperados:', data);
-    return true;
-  } catch (error: unknown) {
-    console.error('Error al verificar la conexión a Supabase:', error instanceof Error ? error.message : 'Desconocido');
-    return false;
-  }
-}
-// Llama a la verificación al inicio
-checkSupabaseConnection().then((success) => {
-  if (success) {
-    console.log('Iniciando el servidor después de verificar la conexión a Supabase.');
-  } else {
-    console.log('Advertencia: No se pudo verificar la conexión a Supabase, pero el servidor se iniciará de todos modos.');
-  }
+// === Rutas ===
+
+// Ruta principal
+app.get("/", (_, res) => {
+  res.send("🚀 Servidor Express conectado a Supabase PostgreSQL y listo con Brevo API.");
 });
 
-// RUTA DE REGISTRO
-app.post('/api/register', async (req: Request, res: Response) => {
+// Registro
+app.post("/api/register", async (req: Request, res: Response) => {
   const { email, password, name, lastname } = req.body;
   try {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { name, lastname } }
-    });
-    if (error) throw error;  // Lanza el error para el catch
-    res.status(201).json({ message: 'Usuario registrado', user: data.user });
-  } catch (error: unknown) {  // Especifica unknown explícitamente
-    let errorMessage = 'Error desconocido';
-    if (error instanceof Error) {  // Type guard
-      errorMessage = error.message;
-    }
-    res.status(500).json({ error: errorMessage });
+    const result = await client.query(
+      "INSERT INTO users (email, password, name, lastname) VALUES ($1, crypt($2, gen_salt('bf')), $3, $4) RETURNING id, email, name, lastname;",
+      [email, password, name, lastname]
+    );
+    res.status(201).json({ user: result.rows[0] });
+  } catch (error) {
+    console.error("❌ Error en registro:", error);
+    res.status(500).json({ error: "Error al registrar usuario" });
   }
 });
 
-// RUTA DE LOGIN
-app.post('/api/login', async (req: Request, res: Response) => {
+// Login
+app.post("/api/login", async (req: Request, res: Response) => {
   const { email, password } = req.body;
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    res.json({ token: data.session?.access_token });
-  } catch (error: unknown) {
-    let errorMessage = 'Error desconocido';
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-    res.status(401).json({ error: errorMessage });
+    const result = await client.query(
+      "SELECT * FROM users WHERE email = $1 AND password = crypt($2, password);",
+      [email, password]
+    );
+    if (result.rows.length === 0) return res.status(401).json({ error: "Credenciales inválidas" });
+    res.json({ user: result.rows[0] });
+  } catch (error) {
+    console.error("❌ Error en login:", error);
+    res.status(500).json({ error: "Error al iniciar sesión" });
   }
 });
 
-// RUTA DE RECUPERACIÓN DE CONTRASEÑA
-app.post('/api/forgot-password', async (req: Request, res: Response) => {
+// Recuperar contraseña
+app.post("/api/forgot-password", async (req: Request, res: Response) => {
   const { email } = req.body;
+  const token = Math.random().toString(36).substring(2); // token simple de ejemplo
   try {
-    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.FRONTEND_URL}/reset-password`
-    });
-    if (error) throw error;
-    res.json({ message: 'Correo de recuperación enviado' });
-  } catch (error: unknown) {
-    let errorMessage = 'Error desconocido';
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-    res.status(500).json({ error: errorMessage });
+    await sendRecoveryEmail(email, token);
+    res.json({ message: "Correo de recuperación enviado" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Otras rutas o middleware...
-
-app.listen(port, () => {
-  console.log(`Servidor en http://localhost:${port}`);
-});
+// === Iniciar servidor ===
+app.listen(port, () => console.log(`🌐 Servidor escuchando en http://localhost:${port}`));
