@@ -1,11 +1,19 @@
+import dotenv from "dotenv";
+dotenv.config();  // Carga .env primero
+
 import express, { Request, Response } from "express";
 import cors from "cors";
-import dotenv from "dotenv";
-import { connectDB } from "./dataBase";
-import client from "./dataBase";
+import { createClient } from '@supabase/supabase-js';  // Importa aquí
 import { sendRecoveryEmail } from "./email";
 
-dotenv.config();
+// Inicializa Supabase después de dotenv
+const supabaseUrl = 'https://bkvcemcsijozbbbbtpnp.supabase.co';
+if (!process.env.SUPABASE_ANON_KEY) {
+  throw new Error('SUPABASE_ANON_KEY is required. Please check your .env file or environment variables.');
+}
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+console.log('✅ SUPABASE_ANON_KEY cargada correctamente.');  // Log de confirmación
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -13,25 +21,24 @@ const port = process.env.PORT || 3000;
 app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:5173" }));
 app.use(express.json());
 
-// Conectar base de datos
-connectDB();
-
-// === Rutas ===
-
 // Ruta principal
-app.get("/", (_, res) => {
-  res.send("🚀 Servidor Express conectado a Supabase PostgreSQL y listo con Brevo API.");
+app.get("/", (_: Request, res: Response) => {  // Agrega tipos: _: Request, res: Response
+  res.send("🚀 Servidor Express conectado a Supabase listo con Brevo API.");
 });
 
 // Registro
 app.post("/api/register", async (req: Request, res: Response) => {
   const { email, password, name, lastname } = req.body;
   try {
-    const result = await client.query(
-      "INSERT INTO users (email, password, name, lastname) VALUES ($1, crypt($2, gen_salt('bf')), $3, $4) RETURNING id, email, name, lastname;",
-      [email, password, name, lastname]
-    );
-    res.status(201).json({ user: result.rows[0] });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name, lastname },
+      },
+    });
+    if (error) throw error;
+    res.status(201).json({ user: data.user });
   } catch (error) {
     console.error("❌ Error en registro:", error);
     res.status(500).json({ error: "Error al registrar usuario" });
@@ -42,12 +49,12 @@ app.post("/api/register", async (req: Request, res: Response) => {
 app.post("/api/login", async (req: Request, res: Response) => {
   const { email, password } = req.body;
   try {
-    const result = await client.query(
-      "SELECT * FROM users WHERE email = $1 AND password = crypt($2, password);",
-      [email, password]
-    );
-    if (result.rows.length === 0) return res.status(401).json({ error: "Credenciales inválidas" });
-    res.json({ user: result.rows[0] });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
+    res.json({ user: data.user });
   } catch (error) {
     console.error("❌ Error en login:", error);
     res.status(500).json({ error: "Error al iniciar sesión" });
@@ -57,14 +64,18 @@ app.post("/api/login", async (req: Request, res: Response) => {
 // Recuperar contraseña
 app.post("/api/forgot-password", async (req: Request, res: Response) => {
   const { email } = req.body;
-  const token = Math.random().toString(36).substring(2); // token simple de ejemplo
   try {
-    await sendRecoveryEmail(email, token);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.FRONTEND_URL}/#/reset_password`,
+    });
+    if (error) throw error;
+    await sendRecoveryEmail(email, "token-placeholder");
     res.json({ message: "Correo de recuperación enviado" });
   } catch (error: any) {
+    console.error("❌ Error en forgot-password:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// === Iniciar servidor ===
+// Iniciar servidor
 app.listen(port, () => console.log(`🌐 Servidor escuchando en http://localhost:${port}`));
