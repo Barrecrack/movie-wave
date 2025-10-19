@@ -5,6 +5,7 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import { createClient } from '@supabase/supabase-js';  // Importa aquí
 import { sendRecoveryEmail } from "./email";
+import jwt from 'jsonwebtoken';
 
 // Inicializa Supabase después de dotenv
 const supabaseUrl = 'https://bkvcemcsijozbbbbtpnp.supabase.co';
@@ -61,18 +62,67 @@ app.post("/api/login", async (req: Request, res: Response) => {
   }
 });
 
+//Edit User
+app.put("/api/update-user", async (req: Request, res: Response) => {
+  const { name, lastname, email, password } = req.body;
+  const token = req.headers.authorization?.split(' ')[1]; // Asume Bearer token
+  if (!token) {
+    return res.status(401).json({ error: "Token requerido" });
+  }
+  try {
+    // Verifica el token con Supabase
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) {
+      return res.status(401).json({ error: "Token inválido" });
+    }
+    // Actualiza usuario en Supabase
+    const { data, error } = await supabase.auth.updateUser({
+      email: email || user.email,
+      password: password || undefined, // Solo si se proporciona
+      data: {
+        name: name || user.user_metadata?.name,
+        lastname: lastname || user.user_metadata?.lastname,
+      },
+    });
+    if (error) throw error;
+    res.json({ user: data.user });
+  } catch (error: any) {
+    console.error("❌ Error en update-user:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Recuperar contraseña
 app.post("/api/forgot-password", async (req: Request, res: Response) => {
   const { email } = req.body;
   try {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.FRONTEND_URL}/#/reset_password`,
-    });
-    if (error) throw error;
-    await sendRecoveryEmail(email, "token-placeholder");
+    // Genera un token JWT simple para el reset (expira en 1 hora)
+    const resetToken = jwt.sign({ email }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
+    // Envía solo el email personalizado con Brevo
+    await sendRecoveryEmail(email, resetToken);
     res.json({ message: "Correo de recuperación enviado" });
   } catch (error: any) {
     console.error("❌ Error en forgot-password:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// NUEVO: Endpoint para resetear contraseña con token
+app.post("/api/reset-password", async (req: Request, res: Response) => {
+  const { token, newPassword } = req.body;
+  try {
+    // Verifica el token
+    const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    const email = decoded.email;
+    const accessToken = req.headers.authorization?.split(' ')[1];
+    if (!accessToken) {
+      return res.status(401).json({ error: "Access token requerido" });
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+    res.json({ message: "Contraseña actualizada" });
+  } catch (error: any) {
+    console.error("❌ Error en reset-password:", error);
     res.status(500).json({ error: error.message });
   }
 });
