@@ -17,7 +17,7 @@ export const sendRecoveryEmail = async (userEmail: string, resetToken: string) =
   try {
     console.log("🔄 Preparando envío de email a:", userEmail);
 
-    const recoveryLink = `${process.env.FRONTEND_URL}/#/reset_password?token=${resetToken}&email=${encodeURIComponent(userEmail)}`;
+    const recoveryLink = `${process.env.FRONTEND_URL}/resetpassword?token=${resetToken}&email=${encodeURIComponent(userEmail)}`;
     console.log("🔗 Enlace de recuperación generado:", recoveryLink);
 
     const sendSmtpEmail = {
