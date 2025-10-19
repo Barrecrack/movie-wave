@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import express, { Request, Response } from "express";
-import cors from "cors";
+import cors, { CorsOptions } from "cors";
 import { createClient } from "@supabase/supabase-js";
 import { sendRecoveryEmail } from "./email";
 import jwt from "jsonwebtoken";
@@ -24,7 +24,6 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL!;
 const supabaseKey =
   process.env.SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
-
 console.log("✅ Supabase inicializado correctamente");
 
 // ---------------------------
@@ -33,31 +32,39 @@ console.log("✅ Supabase inicializado correctamente");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// CORS dinámico (usa FRONTEND_URL del .env)
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      const allowedOrigins = process.env.FRONTEND_URL
-        ? process.env.FRONTEND_URL.split(",")
-        : [];
+// ---------------------------
+// 🔹 CORS dinámico
+// ---------------------------
+const allowedOrigins = process.env.FRONTEND_URL
+  ? [process.env.FRONTEND_URL.trim().replace(/\/$/, "")]
+  : ["http://localhost:5173"];
 
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.warn(`🚫 CORS bloqueado para origen no permitido: ${origin}`);
-        callback(new Error("No autorizado por CORS"));
-      }
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // Permite Postman o SSR sin origin
+
+    const cleanOrigin = origin.replace(/\/$/, "");
+    if (allowedOrigins.includes(cleanOrigin)) {
+      callback(null, true);
+    } else {
+      console.warn(`🚫 CORS bloqueado para origen no permitido: ${origin}`);
+      callback(new Error("No autorizado por CORS"));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+  optionsSuccessStatus: 204, // evita errores en navegadores viejos
+};
+
+app.use(cors(corsOptions));
+// Preflight global (para OPTIONS)
+app.options("*", cors(corsOptions));
 
 app.use(express.json());
 
 // ---------------------------
-// 🔹 Rutas principales
+// 🔹 Ruta principal
 // ---------------------------
 app.get("/", (_: Request, res: Response) => {
   res.send("🚀 Servidor Express conectado a Supabase y listo con Brevo API.");
@@ -119,7 +126,7 @@ app.put("/api/update-user", async (req: Request, res: Response) => {
 
     const { name, lastname, email, password } = req.body;
 
-    // Solo los backends con SERVICE_ROLE pueden usar admin.updateUserById
+    // Si no hay SERVICE_ROLE_KEY, usa auth.updateUser
     if (!process.env.SERVICE_ROLE_KEY) {
       console.warn("⚠️ SERVICE_ROLE_KEY no definida, usando auth.updateUser()");
       const { data, error } = await supabase.auth.updateUser({
