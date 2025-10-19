@@ -36,15 +36,24 @@ const port = process.env.PORT || 3000;
 // CORS dinámico (usa FRONTEND_URL del .env)
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL?.split(",") || [
-      "http://localhost:5173",
-      "https://moviewave-three.vercel.app",
-    ],
-    methods: ["GET", "POST", "PUT"],
+    origin: (origin, callback) => {
+      const allowedOrigins = process.env.FRONTEND_URL
+        ? process.env.FRONTEND_URL.split(",")
+        : [];
+
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn(`🚫 CORS bloqueado para origen no permitido: ${origin}`);
+        callback(new Error("No autorizado por CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );
+
 app.use(express.json());
 
 // ---------------------------
