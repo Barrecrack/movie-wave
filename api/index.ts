@@ -21,8 +21,7 @@ if (!process.env.SUPABASE_ANON_KEY && !process.env.SERVICE_ROLE_KEY) {
 // 🔹 Inicializar Supabase
 // ---------------------------
 const supabaseUrl = process.env.VITE_SUPABASE_URL!;
-const supabaseKey =
-  process.env.SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
+const supabaseKey = process.env.SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 console.log("✅ Supabase inicializado correctamente");
 
