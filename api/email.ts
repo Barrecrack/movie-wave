@@ -3,29 +3,49 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// Configurar cliente API de Brevo
-const defaultClient = SibApiV3Sdk.ApiClient.instance;
-const apiKey = defaultClient.authentications["api-key"];
-apiKey.apiKey = process.env.BREVO_API_KEY!;
+console.log("📧 Inicializando módulo de envío de correos (email.ts)...");
+
+// ============================
+// 🔹 Configuración Brevo API
+// ============================
+try {
+  console.log("🔐 Cargando API key de Brevo...");
+  const defaultClient = SibApiV3Sdk.ApiClient.instance;
+  const apiKey = defaultClient.authentications["api-key"];
+  if (!process.env.BREVO_API_KEY) {
+    console.error("❌ Faltante: BREVO_API_KEY no está definida en .env");
+  } else {
+    console.log("✅ BREVO_API_KEY cargada correctamente (longitud:", process.env.BREVO_API_KEY.length, ")");
+  }
+  apiKey.apiKey = process.env.BREVO_API_KEY!;
+} catch (err) {
+  console.error("❌ Error inicializando cliente Brevo:", err);
+}
 
 const brevoApi = new SibApiV3Sdk.TransactionalEmailsApi();
+console.log("✅ Cliente de Brevo listo para enviar correos");
 
-/**
- * Envía un correo de recuperación de contraseña usando Brevo API
- */
+// ============================
+// ✉️ Envío de email de recuperación
+// ============================
 export const sendRecoveryEmail = async (userEmail: string, resetToken: string) => {
   try {
     console.log("🔄 Preparando envío de email a:", userEmail);
+    console.log("🔑 Token de recuperación (truncado):", resetToken.slice(0, 10) + "...");
 
     // Usa la URL del frontend desde variable de entorno
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    const recoveryLink = `${frontendUrl}/resetpassword?token=${resetToken}&email=${encodeURIComponent(userEmail)}`;
+    console.log("🌐 URL del frontend detectada:", frontendUrl);
 
+    const recoveryLink = `${frontendUrl}/resetpassword?token=${resetToken}&email=${encodeURIComponent(userEmail)}`;
     console.log("🔗 Enlace de recuperación generado:", recoveryLink);
+
+    const senderEmail = process.env.EMAIL_SENDER || "noreply@moviewave.app";
+    console.log("📤 Correo remitente configurado:", senderEmail);
 
     const sendSmtpEmail = {
       sender: {
-        email: process.env.EMAIL_SENDER || "noreply@moviewave.app",
+        email: senderEmail,
         name: "MovieWave",
       },
       to: [{ email: userEmail }],
@@ -59,10 +79,15 @@ export const sendRecoveryEmail = async (userEmail: string, resetToken: string) =
       `,
     };
 
+    console.log("📦 Preparando envío del email a Brevo...");
     const response = await brevoApi.sendTransacEmail(sendSmtpEmail);
-    console.log("✅ Email enviado correctamente con ID:", response?.messageId || "OK");
+
+    console.log("✅ Email enviado correctamente con ID:", response?.messageId || "Sin ID");
+    console.log("📨 Respuesta completa de Brevo:", JSON.stringify(response, null, 2));
   } catch (error: any) {
-    console.error("❌ Error enviando correo:", error.message || error);
+    console.error("❌ Error enviando correo con Brevo:");
+    console.error("   • Mensaje:", error.message || error);
+    console.error("   • Stack:", error.stack || "Sin stack disponible");
     throw new Error(`Error al enviar email: ${error.message}`);
   }
 };
