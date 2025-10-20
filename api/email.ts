@@ -6,7 +6,7 @@ dotenv.config();
 console.log("📧 Inicializando módulo de envío de correos (email.ts)...");
 
 // ============================
-// 🔹 Configuración Brevo API
+// 🔹 Brief API Configuration
 // ============================
 try {
   console.log("🔐 Cargando API key de Brevo...");
@@ -26,14 +26,14 @@ const brevoApi = new SibApiV3Sdk.TransactionalEmailsApi();
 console.log("✅ Cliente de Brevo listo para enviar correos");
 
 // ============================
-// ✉️ Envío de email de recuperación
+// ✉️ Sending a recovery email
 // ============================
 export const sendRecoveryEmail = async (userEmail: string, resetToken: string) => {
   try {
     console.log("🔄 Preparando envío de email a:", userEmail);
     console.log("🔑 Token de recuperación (truncado):", resetToken.slice(0, 10) + "...");
 
-    // Usa la URL del frontend desde variable de entorno
+    // Use the frontend URL from an environment variable
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     console.log("🌐 URL del frontend detectada:", frontendUrl);
 

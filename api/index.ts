@@ -8,7 +8,7 @@ import { sendRecoveryEmail } from "./email";
 import jwt from "jsonwebtoken";
 
 // ---------------------------
-// 🔹 Validación de variables
+// 🔹 Validation of variables
 // ---------------------------
 console.log("🧩 Iniciando servidor con variables de entorno...");
 if (!process.env.VITE_SUPABASE_URL) {
@@ -20,7 +20,7 @@ if (!process.env.SUPABASE_ANON_KEY && !process.env.SERVICE_ROLE_KEY) {
 console.log("✅ Variables de entorno cargadas correctamente");
 
 // ---------------------------
-// 🔹 Inicializar Supabase
+// 🔹 Initialize Supabase
 // ---------------------------
 console.log("🔗 Conectando a Supabase...");
 const supabaseUrl = process.env.VITE_SUPABASE_URL!;
@@ -30,14 +30,14 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 console.log("✅ Supabase inicializado correctamente");
 
 // ---------------------------
-// 🔹 Configurar servidor Express
+// 🔹 Configure Express Server
 // ---------------------------
 const app = express();
 const port = process.env.PORT || 3000;
 console.log("⚙️ Inicializando servidor Express...");
 
 // ---------------------------
-// 🔹 CORS dinámico
+// 🔹 Dynamic CORS
 // ---------------------------
 console.log("🌐 Configurando CORS...");
 const allowedOrigins = process.env.FRONTEND_URL
@@ -73,7 +73,7 @@ app.options("*", cors(corsOptions));
 app.use(express.json());
 
 // ---------------------------
-// 🔹 Ruta principal
+// 🔹 Main route
 // ---------------------------
 app.get("/", (_: Request, res: Response) => {
   console.log("📡 Petición GET / recibida");
@@ -81,7 +81,7 @@ app.get("/", (_: Request, res: Response) => {
 });
 
 // ---------------------------
-// 🔹 Registro de usuarios
+// 🔹 User registration
 // ---------------------------
 app.post("/api/register", async (req: Request, res: Response) => {
   const { email, password, name, lastname } = req.body;
@@ -108,7 +108,7 @@ app.post("/api/register", async (req: Request, res: Response) => {
 });
 
 // ---------------------------
-// 🔹 Login de usuarios
+// 🔹 User login
 // ---------------------------
 app.post("/api/login", async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -134,7 +134,7 @@ app.post("/api/login", async (req: Request, res: Response) => {
 });
 
 // ---------------------------
-// 🔹 Editar perfil de usuario
+// 🔹 Edit user profile
 // ---------------------------
 app.put("/api/update-user", async (req: Request, res: Response) => {
   console.log("🛠️ Petición PUT /api/update-user recibida");
@@ -198,7 +198,7 @@ app.put("/api/update-user", async (req: Request, res: Response) => {
 });
 
 // ---------------------------
-// 🔹 Recuperación de contraseña
+// 🔹 Password recovery
 // ---------------------------
 app.post("/api/forgot-password", async (req: Request, res: Response) => {
   const { email } = req.body;
@@ -222,7 +222,7 @@ app.post("/api/forgot-password", async (req: Request, res: Response) => {
 });
 
 // ---------------------------
-// 🔹 Restablecer contraseña
+// 🔹 Reset password
 // ---------------------------
 app.post("/api/reset-password", async (req: Request, res: Response) => {
   console.log("🔁 Petición POST /api/reset-password recibida");
@@ -259,7 +259,7 @@ app.post("/api/reset-password", async (req: Request, res: Response) => {
 });
 
 // ---------------------------
-// 🔹 Iniciar servidor
+// 🔹 Start server
 // ---------------------------
 app.listen(port, () => {
   console.log(`🌐 Servidor corriendo en http://localhost:${port}`);
