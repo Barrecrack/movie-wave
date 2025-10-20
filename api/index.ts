@@ -8,7 +8,7 @@ import { sendRecoveryEmail } from "./email";
 import jwt from "jsonwebtoken";
 
 // ---------------------------
-// 🔹 Validación de variables
+// 🔹 Validation of variables
 // ---------------------------
 if (!process.env.VITE_SUPABASE_URL) {
   throw new Error("❌ Faltante: VITE_SUPABASE_URL en .env");
@@ -18,7 +18,7 @@ if (!process.env.SUPABASE_ANON_KEY && !process.env.SERVICE_ROLE_KEY) {
 }
 
 // ---------------------------
-// 🔹 Inicializar Supabase
+// 🔹 Initialize Supabase
 // ---------------------------
 const supabaseUrl = process.env.VITE_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_ANON_KEY!;
@@ -26,13 +26,13 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 console.log("✅ Supabase inicializado correctamente");
 
 // ---------------------------
-// 🔹 Configurar servidor Express
+// 🔹 Configure Express Server
 // ---------------------------
 const app = express();
 const port = process.env.PORT || 3000;
 
 // ---------------------------
-// 🔹 CORS dinámico
+// 🔹 Dynamic CORS
 // ---------------------------
 const allowedOrigins = process.env.FRONTEND_URL
   ? [process.env.FRONTEND_URL.trim().replace(/\/$/, "")]
@@ -40,7 +40,7 @@ const allowedOrigins = process.env.FRONTEND_URL
 
 const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // Permite Postman o SSR sin origin
+    if (!origin) return callback(null, true); // Allows Postman or SSR without origin
     const cleanOrigin = origin.replace(/\/$/, "");
     if (allowedOrigins.includes(cleanOrigin)) {
       callback(null, true);
@@ -52,24 +52,24 @@ const corsOptions: CorsOptions = {
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
-  optionsSuccessStatus: 204, // evita errores en navegadores viejos
+  optionsSuccessStatus: 204, // avoid errors in older browsers
 };
 
 app.use(cors(corsOptions));
-// Preflight global (para OPTIONS)
+// Global preflight (for OPTIONS)
 app.options("*", cors(corsOptions));
 
 app.use(express.json());
 
 // ---------------------------
-// 🔹 Ruta principal
+// 🔹 Main route
 // ---------------------------
 app.get("/", (_: Request, res: Response) => {
   res.send("🚀 Servidor Express conectado a Supabase y listo con Brevo API.");
 });
 
 // ---------------------------
-// 🔹 Registro de usuarios
+// 🔹 User registration
 // ---------------------------
 app.post("/api/register", async (req: Request, res: Response) => {
   const { email, password, name, lastname } = req.body;
@@ -90,7 +90,7 @@ app.post("/api/register", async (req: Request, res: Response) => {
 });
 
 // ---------------------------
-// 🔹 Login de usuarios
+// 🔹 User login
 // ---------------------------
 app.post("/api/login", async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -108,7 +108,7 @@ app.post("/api/login", async (req: Request, res: Response) => {
 });
 
 // ---------------------------
-// 🔹 Editar perfil de usuario
+// 🔹 Edit user profile
 // ---------------------------
 app.put("/api/update-user", async (req: Request, res: Response) => {
   const token = req.headers.authorization?.split(" ")[1];
@@ -117,10 +117,10 @@ app.put("/api/update-user", async (req: Request, res: Response) => {
   }
 
   try {
-    // Intentar obtener el usuario
+    // Trying to get the user
     let { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
-    // Si falla, intentar refrescar sesión antes de invalidar
+    // If it fails, try to refresh session before invalidating
     if (userError || !user) {
       console.warn("⚠️ Token posiblemente expirado, intentando refrescar sesión...");
       const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
@@ -132,7 +132,7 @@ app.put("/api/update-user", async (req: Request, res: Response) => {
 
     const { name, lastname, email, password } = req.body;
 
-    // Si no hay SERVICE_ROLE_KEY, usa auth.updateUser
+    // If there is no SERVICE_ROLE_KEY, use auth.updateUser
     if (!process.env.SERVICE_ROLE_KEY) {
       console.warn("⚠️ SERVICE_ROLE_KEY no definida, usando auth.updateUser()");
       const { data, error } = await supabase.auth.updateUser({
@@ -147,7 +147,7 @@ app.put("/api/update-user", async (req: Request, res: Response) => {
       return res.json({ user: data.user });
     }
 
-    // Si hay SERVICE_ROLE_KEY, usa privilegios admin
+    // If SERVICE_ROLE_KEY is present, use admin privileges
     const { error: updateError } = await supabase.auth.admin.updateUserById(
       user.id,
       {
@@ -167,7 +167,7 @@ app.put("/api/update-user", async (req: Request, res: Response) => {
 });
 
 // ---------------------------
-// 🔹 Recuperación de contraseña
+// 🔹 Password recovery
 // ---------------------------
 app.post("/api/forgot-password", async (req: Request, res: Response) => {
   const { email } = req.body;
@@ -187,7 +187,7 @@ app.post("/api/forgot-password", async (req: Request, res: Response) => {
 });
 
 // ---------------------------
-// 🔹 Restablecer contraseña
+// 🔹 Reset password
 // ---------------------------
 app.post("/api/reset-password", async (req: Request, res: Response) => {
   const { token, newPassword } = req.body;
@@ -214,7 +214,7 @@ app.post("/api/reset-password", async (req: Request, res: Response) => {
 });
 
 // ---------------------------
-// 🔹 Iniciar servidor
+// 🔹 Start server
 // ---------------------------
 app.listen(port, () => {
   console.log(`🌐 Servidor corriendo en http://localhost:${port}`);

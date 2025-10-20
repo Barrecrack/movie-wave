@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// Configurar cliente API de Brevo
+// Configure Brevo API client
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
 const apiKey = defaultClient.authentications["api-key"];
 apiKey.apiKey = process.env.BREVO_API_KEY!;
@@ -11,13 +11,13 @@ apiKey.apiKey = process.env.BREVO_API_KEY!;
 const brevoApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
 /**
- * Envía un correo de recuperación de contraseña usando Brevo API
+ * Send a password recovery email using the Brevo API
  */
 export const sendRecoveryEmail = async (userEmail: string, resetToken: string) => {
   try {
     console.log("🔄 Preparando envío de email a:", userEmail);
 
-    // Usa la URL del frontend desde variable de entorno
+    // Use the frontend URL from an environment variable
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     const recoveryLink = `${frontendUrl}/resetpassword?token=${resetToken}&email=${encodeURIComponent(userEmail)}`;
 
