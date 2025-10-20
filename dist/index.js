@@ -17,7 +17,7 @@ if (!process.env.SUPABASE_ANON_KEY && !process.env.SERVICE_ROLE_KEY) {
     throw new Error("❌ Faltante: SUPABASE_ANON_KEY o SERVICE_ROLE_KEY en .env");
 }
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
 const supabase = (0, supabase_js_1.createClient)(supabaseUrl, supabaseKey);
 console.log("✅ Supabase inicializado correctamente");
 const app = (0, express_1.default)();
