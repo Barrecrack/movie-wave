@@ -119,9 +119,17 @@ app.put("/api/update-user", async (req: Request, res: Response) => {
   }
 
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    // Intentar obtener el usuario
+    let { data: { user }, error: userError } = await supabase.auth.getUser(token);
+
+    // Si falla, intentar refrescar sesión antes de invalidar
     if (userError || !user) {
-      return res.status(401).json({ error: "Token inválido o sesión expirada" });
+      console.warn("⚠️ Token posiblemente expirado, intentando refrescar sesión...");
+      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError || !refreshed?.user) {
+        return res.status(401).json({ error: "Token inválido o sesión expirada" });
+      }
+      user = refreshed.user;
     }
 
     const { name, lastname, email, password } = req.body;
@@ -159,6 +167,7 @@ app.put("/api/update-user", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Error al actualizar usuario" });
   }
 });
+
 
 // ---------------------------
 // 🔹 Recuperación de contraseña
