@@ -6,15 +6,21 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendRecoveryEmail = void 0;
 const sib_api_v3_sdk_1 = __importDefault(require("sib-api-v3-sdk"));
 const dotenv_1 = __importDefault(require("dotenv"));
+console.log('🔹 Cargando configuración de Brevo (Sendinblue)...');
 dotenv_1.default.config();
+console.log('🔹 Inicializando cliente de Brevo...');
 const defaultClient = sib_api_v3_sdk_1.default.ApiClient.instance;
 const apiKey = defaultClient.authentications['api-key'];
 apiKey.apiKey = process.env.BREVO_API_KEY;
+console.log('✅ Clave API configurada:', process.env.BREVO_API_KEY ? 'OK' : '❌ NO DEFINIDA');
 const brevoApi = new sib_api_v3_sdk_1.default.TransactionalEmailsApi();
+console.log('✅ Cliente de correo Brevo inicializado correctamente.');
 const sendRecoveryEmail = async (userEmail, resetToken) => {
+    console.log('📩 [sendRecoveryEmail] Iniciando proceso para:', userEmail);
     try {
         console.log('🔄 Preparando envío de email a:', userEmail);
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        console.log('🌍 URL frontend detectada:', frontendUrl);
         const recoveryLink = `${frontendUrl}/resetpassword?token=${resetToken}&email=${encodeURIComponent(userEmail)}`;
         console.log('🔗 Enlace de recuperación generado:', recoveryLink);
         const sendSmtpEmail = {
@@ -49,6 +55,7 @@ const sendRecoveryEmail = async (userEmail, resetToken) => {
         Este enlace expira en 1 hora. Si no solicitaste esto, ignora este correo.
       `,
         };
+        console.log('📨 Enviando correo mediante Brevo...');
         const response = await brevoApi.sendTransacEmail(sendSmtpEmail);
         console.log('✅ Email enviado correctamente con ID:', response?.messageId || 'OK');
     }
