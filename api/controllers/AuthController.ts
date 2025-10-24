@@ -1,4 +1,4 @@
-import { supabase, supabaseAdmin } from '../config/supabase';
+import { supabase } from '../config/supabase';
 import jwt from 'jsonwebtoken';
 import { sendRecoveryEmail } from '../services/emailService';
 import { Request, Response } from 'express';
@@ -12,9 +12,7 @@ class AuthController {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: { name, lastname },
-        },
+        options: { data: { name, lastname } },
       });
       if (error) throw error;
       console.log('✅ Usuario registrado correctamente:', data.user?.email);
@@ -30,10 +28,7 @@ class AuthController {
     const { email, password } = req.body;
     try {
       console.log('🔹 Autenticando usuario en Supabase...');
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       console.log('✅ Login exitoso para:', data.user?.email);
       res.json({ user: data.user, token: data.session?.access_token });
@@ -50,47 +45,30 @@ class AuthController {
       console.warn('⚠️ Token no proporcionado en cabecera Authorization.');
       return res.status(401).json({ error: 'Token requerido' });
     }
+
     try {
       console.log('🔹 Obteniendo usuario desde el token...');
-      let { data: { user }, error: userError } = await supabase.auth.getUser(token);
+      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
       if (userError || !user) {
-        console.warn('⚠️ Token posiblemente expirado, intentando refrescar sesión...');
-        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-        if (refreshError || !refreshed?.user) {
-          console.error('❌ Sesión inválida o no se pudo refrescar.');
-          return res.status(401).json({ error: 'Token inválido o sesión expirada' });
-        }
-        user = refreshed.user;
+        console.error('❌ No se pudo obtener usuario con el token.');
+        return res.status(401).json({ error: 'Token inválido o expirado' });
       }
 
       const { name, lastname, email, password } = req.body;
       console.log('🔹 Actualizando datos del usuario:', user.email);
 
-      if (!process.env.SERVICE_ROLE_KEY) {
-        console.warn('⚠️ SERVICE_ROLE_KEY no definida, usando auth.updateUser()');
-        const { data, error } = await supabase.auth.updateUser({
-          email: email || user.email,
-          password: password || undefined,
-          data: {
-            name: name || user.user_metadata?.name,
-            lastname: lastname || user.user_metadata?.lastname,
-          },
-        });
-        if (error) throw error;
-        console.log('✅ Usuario actualizado (modo normal):', data.user?.email);
-        return res.json({ user: data.user });
-      }
-
-      console.log('🔹 Usando modo administrador para actualización.');
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
-        email,
+      const { data, error } = await supabase.auth.updateUser({
+        email: email || user.email,
         password: password || undefined,
-        user_metadata: { name, lastname },
+        data: {
+          name: name || user.user_metadata?.name,
+          lastname: lastname || user.user_metadata?.lastname,
+        },
       });
 
-      if (updateError) throw updateError;
-      console.log('✅ Usuario actualizado correctamente (modo admin).');
-      res.json({ message: 'Perfil actualizado correctamente' });
+      if (error) throw error;
+      console.log('✅ Usuario actualizado correctamente:', data.user?.email);
+      res.json({ user: data.user });
     } catch (error: any) {
       console.error('❌ Error en update-user:', error.message);
       res.status(500).json({ error: 'Error al actualizar usuario' });
@@ -102,7 +80,9 @@ class AuthController {
     const { email } = req.body;
     try {
       console.log('🔹 Generando token de recuperación...');
-      const resetToken = jwt.sign({ email }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
+      const resetToken = jwt.sign({ email }, process.env.JWT_SECRET || 'secret', {
+        expiresIn: '1h',
+      });
       console.log('🔹 Enviando correo de recuperación...');
       await sendRecoveryEmail(email, resetToken);
       console.log('✅ Correo de recuperación enviado correctamente.');
@@ -116,9 +96,7 @@ class AuthController {
   async resetPassword(req: Request, res: Response) {
     console.log('🟢 [RESET PASSWORD] Solicitud de reseteo recibida.');
     const { token, newPassword } = req.body;
-
     console.log('📦 Body recibido:', req.body);
-    console.log('🔑 SERVICE_ROLE_KEY cargada:', process.env.SERVICE_ROLE_KEY ? '✅ Sí' : '❌ No');
 
     try {
       console.log('🔹 Verificando token JWT...');
@@ -126,12 +104,12 @@ class AuthController {
       const email = decoded.email;
       console.log('📧 Email decodificado del token:', email);
 
-      console.log('🔹 Obteniendo lista de usuarios desde Supabase Admin...');
-      const { data: userList, error: searchError } = await supabaseAdmin.auth.admin.listUsers();
-      if (searchError) throw searchError;
+      console.log('🔹 Obteniendo lista de usuarios...');
+      const { data: usersData, error: listError } = await supabase.auth.admin.listUsers();
+      if (listError) throw listError;
 
-      console.log(`📋 ${userList.users.length} usuarios obtenidos.`);
-      const user = userList.users.find((u: any) => u.email === email);
+      console.log(`📋 ${usersData.users.length} usuarios obtenidos.`);
+      const user = usersData.users.find((u: any) => u.email === email);
 
       if (!user) {
         console.warn('⚠️ Usuario no encontrado en Supabase.');
@@ -139,12 +117,11 @@ class AuthController {
       }
 
       console.log('🔹 Actualizando contraseña del usuario con ID:', user.id);
-      const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+      const { error } = await supabase.auth.admin.updateUserById(user.id, {
         password: newPassword,
       });
 
       if (error) throw error;
-
       console.log('✅ Contraseña actualizada correctamente para:', user.email);
       res.json({ message: 'Contraseña actualizada correctamente' });
     } catch (error: any) {
