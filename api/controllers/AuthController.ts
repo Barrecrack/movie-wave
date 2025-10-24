@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabase';
+import { supabase, supabaseAdmin } from '../config/supabase';
 import jwt from 'jsonwebtoken';
 import { sendRecoveryEmail } from '../services/emailService';
 import { Request, Response } from 'express';
@@ -62,6 +62,7 @@ class AuthController {
         }
         user = refreshed.user;
       }
+
       const { name, lastname, email, password } = req.body;
       console.log('🔹 Actualizando datos del usuario:', user.email);
 
@@ -80,11 +81,13 @@ class AuthController {
         return res.json({ user: data.user });
       }
 
-      const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
+      console.log('🔹 Usando modo administrador para actualización.');
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
         email,
         password: password || undefined,
         user_metadata: { name, lastname },
       });
+
       if (updateError) throw updateError;
       console.log('✅ Usuario actualizado correctamente (modo admin).');
       res.json({ message: 'Perfil actualizado correctamente' });
@@ -113,27 +116,40 @@ class AuthController {
   async resetPassword(req: Request, res: Response) {
     console.log('🟢 [RESET PASSWORD] Solicitud de reseteo recibida.');
     const { token, newPassword } = req.body;
+
+    console.log('📦 Body recibido:', req.body);
+    console.log('🔑 SERVICE_ROLE_KEY cargada:', process.env.SERVICE_ROLE_KEY ? '✅ Sí' : '❌ No');
+
     try {
       console.log('🔹 Verificando token JWT...');
       const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'secret');
       const email = decoded.email;
-      console.log('🔹 Buscando usuario con email:', email);
-      const { data: { users }, error: searchError } = await supabase.auth.admin.listUsers();
+      console.log('📧 Email decodificado del token:', email);
+
+      console.log('🔹 Obteniendo lista de usuarios desde Supabase Admin...');
+      const { data: userList, error: searchError } = await supabaseAdmin.auth.admin.listUsers();
       if (searchError) throw searchError;
-      const user = users.find((u: any) => u.email === email);
+
+      console.log(`📋 ${userList.users.length} usuarios obtenidos.`);
+      const user = userList.users.find((u: any) => u.email === email);
+
       if (!user) {
-        console.warn('⚠️ Usuario no encontrado.');
+        console.warn('⚠️ Usuario no encontrado en Supabase.');
         return res.status(404).json({ error: 'Usuario no encontrado' });
       }
-      console.log('🔹 Actualizando contraseña del usuario...');
-      const { error } = await supabase.auth.admin.updateUserById(user.id, {
+
+      console.log('🔹 Actualizando contraseña del usuario con ID:', user.id);
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
         password: newPassword,
       });
+
       if (error) throw error;
+
       console.log('✅ Contraseña actualizada correctamente para:', user.email);
       res.json({ message: 'Contraseña actualizada correctamente' });
     } catch (error: any) {
       console.error('❌ Error en reset-password:', error.message);
+      console.error('📛 Stack:', error.stack);
       res.status(500).json({ error: error.message });
     }
   }
