@@ -1,11 +1,11 @@
-import SibApiV3Sdk from "sib-api-v3-sdk";
-import dotenv from "dotenv";
+import SibApiV3Sdk from 'sib-api-v3-sdk';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
 // Configure Brevo API client
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
-const apiKey = defaultClient.authentications["api-key"];
+const apiKey = defaultClient.authentications['api-key'];
 apiKey.apiKey = process.env.BREVO_API_KEY!;
 
 const brevoApi = new SibApiV3Sdk.TransactionalEmailsApi();
@@ -15,21 +15,18 @@ const brevoApi = new SibApiV3Sdk.TransactionalEmailsApi();
  */
 export const sendRecoveryEmail = async (userEmail: string, resetToken: string) => {
   try {
-    console.log("🔄 Preparando envío de email a:", userEmail);
+    console.log('🔄 Preparando envío de email a:', userEmail);
 
     // Use the frontend URL from an environment variable
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const recoveryLink = `${frontendUrl}/resetpassword?token=${resetToken}&email=${encodeURIComponent(userEmail)}`;
 
-    console.log("🔗 Enlace de recuperación generado:", recoveryLink);
+    console.log('🔗 Enlace de recuperación generado:', recoveryLink);
 
     const sendSmtpEmail = {
-      sender: {
-        email: process.env.EMAIL_SENDER || "noreply@moviewave.app",
-        name: "MovieWave",
-      },
+      sender: { email: process.env.EMAIL_SENDER || 'noreply@moviewave.app', name: 'MovieWave' },
       to: [{ email: userEmail }],
-      subject: "🔑 Recuperación de Contraseña - MovieWave",
+      subject: '🔑 Recuperación de Contraseña - MovieWave',
       htmlContent: `
         <div style="font-family: Arial, sans-serif; color: #333;">
           <h2 style="color:#8300BF;">Recupera tu contraseña</h2>
@@ -60,9 +57,9 @@ export const sendRecoveryEmail = async (userEmail: string, resetToken: string) =
     };
 
     const response = await brevoApi.sendTransacEmail(sendSmtpEmail);
-    console.log("✅ Email enviado correctamente con ID:", response?.messageId || "OK");
+    console.log('✅ Email enviado correctamente con ID:', response?.messageId || 'OK');
   } catch (error: any) {
-    console.error("❌ Error enviando correo:", error.message || error);
+    console.error('❌ Error enviando correo:', error.message || error);
     throw new Error(`Error al enviar email: ${error.message}`);
   }
 };
