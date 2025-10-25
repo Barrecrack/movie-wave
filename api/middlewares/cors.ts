@@ -4,7 +4,9 @@ console.log('🔹 Configurando CORS...');
 
 // Mostrar las URLs permitidas
 const allowedOrigins = process.env.FRONTEND_URL
-  ? [process.env.FRONTEND_URL.trim().replace(/\/$/, '')]
+  ? process.env.FRONTEND_URL.split(',')
+      .map(url => url.trim().replace(/\/$/, ''))
+      .filter(url => url.length > 0)
   : ['http://localhost:5173'];
 
 console.log('✅ Orígenes permitidos:', allowedOrigins);
