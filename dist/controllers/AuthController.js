@@ -15,9 +15,7 @@ class AuthController {
             const { data, error } = await supabase_1.supabase.auth.signUp({
                 email,
                 password,
-                options: {
-                    data: { name, lastname },
-                },
+                options: { data: { name, lastname } },
             });
             if (error)
                 throw error;
@@ -34,10 +32,7 @@ class AuthController {
         const { email, password } = req.body;
         try {
             console.log('🔹 Autenticando usuario en Supabase...');
-            const { data, error } = await supabase_1.supabase.auth.signInWithPassword({
-                email,
-                password,
-            });
+            const { data, error } = await supabase_1.supabase.auth.signInWithPassword({ email, password });
             if (error)
                 throw error;
             console.log('✅ Login exitoso para:', data.user?.email);
@@ -57,42 +52,25 @@ class AuthController {
         }
         try {
             console.log('🔹 Obteniendo usuario desde el token...');
-            let { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
+            const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
             if (userError || !user) {
-                console.warn('⚠️ Token posiblemente expirado, intentando refrescar sesión...');
-                const { data: refreshed, error: refreshError } = await supabase_1.supabase.auth.refreshSession();
-                if (refreshError || !refreshed?.user) {
-                    console.error('❌ Sesión inválida o no se pudo refrescar.');
-                    return res.status(401).json({ error: 'Token inválido o sesión expirada' });
-                }
-                user = refreshed.user;
+                console.error('❌ No se pudo obtener usuario con el token.');
+                return res.status(401).json({ error: 'Token inválido o expirado' });
             }
             const { name, lastname, email, password } = req.body;
             console.log('🔹 Actualizando datos del usuario:', user.email);
-            if (!process.env.SERVICE_ROLE_KEY) {
-                console.warn('⚠️ SERVICE_ROLE_KEY no definida, usando auth.updateUser()');
-                const { data, error } = await supabase_1.supabase.auth.updateUser({
-                    email: email || user.email,
-                    password: password || undefined,
-                    data: {
-                        name: name || user.user_metadata?.name,
-                        lastname: lastname || user.user_metadata?.lastname,
-                    },
-                });
-                if (error)
-                    throw error;
-                console.log('✅ Usuario actualizado (modo normal):', data.user?.email);
-                return res.json({ user: data.user });
-            }
-            const { error: updateError } = await supabase_1.supabase.auth.admin.updateUserById(user.id, {
-                email,
+            const { data, error } = await supabase_1.supabase.auth.updateUser({
+                email: email || user.email,
                 password: password || undefined,
-                user_metadata: { name, lastname },
+                data: {
+                    name: name || user.user_metadata?.name,
+                    lastname: lastname || user.user_metadata?.lastname,
+                },
             });
-            if (updateError)
-                throw updateError;
-            console.log('✅ Usuario actualizado correctamente (modo admin).');
-            res.json({ message: 'Perfil actualizado correctamente' });
+            if (error)
+                throw error;
+            console.log('✅ Usuario actualizado correctamente:', data.user?.email);
+            res.json({ user: data.user });
         }
         catch (error) {
             console.error('❌ Error en update-user:', error.message);
@@ -104,7 +82,9 @@ class AuthController {
         const { email } = req.body;
         try {
             console.log('🔹 Generando token de recuperación...');
-            const resetToken = jsonwebtoken_1.default.sign({ email }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
+            const resetToken = jsonwebtoken_1.default.sign({ email }, process.env.JWT_SECRET || 'secret', {
+                expiresIn: '1h',
+            });
             console.log('🔹 Enviando correo de recuperación...');
             await (0, emailService_1.sendRecoveryEmail)(email, resetToken);
             console.log('✅ Correo de recuperación enviado correctamente.');
@@ -118,20 +98,23 @@ class AuthController {
     async resetPassword(req, res) {
         console.log('🟢 [RESET PASSWORD] Solicitud de reseteo recibida.');
         const { token, newPassword } = req.body;
+        console.log('📦 Body recibido:', req.body);
         try {
             console.log('🔹 Verificando token JWT...');
             const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'secret');
             const email = decoded.email;
-            console.log('🔹 Buscando usuario con email:', email);
-            const { data: { users }, error: searchError } = await supabase_1.supabase.auth.admin.listUsers();
-            if (searchError)
-                throw searchError;
-            const user = users.find((u) => u.email === email);
+            console.log('📧 Email decodificado del token:', email);
+            console.log('🔹 Obteniendo lista de usuarios...');
+            const { data: usersData, error: listError } = await supabase_1.supabase.auth.admin.listUsers();
+            if (listError)
+                throw listError;
+            console.log(`📋 ${usersData.users.length} usuarios obtenidos.`);
+            const user = usersData.users.find((u) => u.email === email);
             if (!user) {
-                console.warn('⚠️ Usuario no encontrado.');
+                console.warn('⚠️ Usuario no encontrado en Supabase.');
                 return res.status(404).json({ error: 'Usuario no encontrado' });
             }
-            console.log('🔹 Actualizando contraseña del usuario...');
+            console.log('🔹 Actualizando contraseña del usuario con ID:', user.id);
             const { error } = await supabase_1.supabase.auth.admin.updateUserById(user.id, {
                 password: newPassword,
             });
@@ -142,6 +125,7 @@ class AuthController {
         }
         catch (error) {
             console.error('❌ Error en reset-password:', error.message);
+            console.error('📛 Stack:', error.stack);
             res.status(500).json({ error: error.message });
         }
     }

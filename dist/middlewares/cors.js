@@ -6,7 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const cors_1 = __importDefault(require("cors"));
 console.log('🔹 Configurando CORS...');
 const allowedOrigins = process.env.FRONTEND_URL
-    ? [process.env.FRONTEND_URL.trim().replace(/\/$/, '')]
+    ? process.env.FRONTEND_URL.split(',')
+        .map(url => url.trim().replace(/\/$/, ''))
+        .filter(url => url.length > 0)
     : ['http://localhost:5173'];
 console.log('✅ Orígenes permitidos:', allowedOrigins);
 const corsOptions = {
