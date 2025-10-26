@@ -11,7 +11,7 @@ class AuthController {
         console.log('🟢 [REGISTER] Solicitud recibida con body:', req.body);
         const { email, password, name, lastname } = req.body;
         try {
-            console.log('🔹 Registrando usuario en Supabase...');
+            console.log('🔹 Registrando usuario en Supabase con role key...');
             const { data, error } = await supabase_1.supabase.auth.signUp({
                 email,
                 password,
@@ -31,7 +31,7 @@ class AuthController {
         console.log('🟢 [LOGIN] Intento de inicio de sesión con email:', req.body.email);
         const { email, password } = req.body;
         try {
-            console.log('🔹 Autenticando usuario en Supabase...');
+            console.log('🔹 Autenticando usuario con role key...');
             const { data, error } = await supabase_1.supabase.auth.signInWithPassword({ email, password });
             if (error)
                 throw error;
