@@ -8,14 +8,16 @@ dotenv_1.default.config();
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("./middlewares/cors"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
+const videosRoutes_1 = __importDefault(require("./routes/videosRoutes"));
 const app = (0, express_1.default)();
 const port = process.env.PORT || 3000;
 app.use(cors_1.default);
 app.use(express_1.default.json());
 app.get('/', (_, res) => {
-    res.send('🚀 Servidor Express conectado a Supabase y listo con Brevo API.');
+    res.send('🚀 Servidor Express conectado a Supabase, Brevo API y Pexels listo.');
 });
 app.use('/api', authRoutes_1.default);
+app.use('/videos', videosRoutes_1.default);
 app.listen(port, () => {
     console.log(`🌐 Servidor corriendo en http://localhost:${port}`);
 });

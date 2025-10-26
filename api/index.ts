@@ -4,6 +4,7 @@ dotenv.config();
 import express, { Request, Response } from 'express';
 import corsMiddleware from './middlewares/cors';
 import authRoutes from './routes/authRoutes';
+import videosRoutes from './routes/videosRoutes'; // ✅ Importar la nueva ruta
 
 // Configurar Express
 const app = express();
@@ -14,11 +15,12 @@ app.use(express.json());
 
 // Ruta principal
 app.get('/', (_: Request, res: Response) => {
-  res.send('🚀 Servidor Express conectado a Supabase y listo con Brevo API.');
+  res.send('🚀 Servidor Express conectado a Supabase, Brevo API y Pexels listo.');
 });
 
-// Montar rutas
+// ✅ Montar rutas
 app.use('/api', authRoutes);
+app.use('/videos', videosRoutes); // ✅ Ruta de videos agregada
 
 // Iniciar servidor
 app.listen(port, () => {
