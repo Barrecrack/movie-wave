@@ -28,21 +28,23 @@ const sendRecoveryEmail = async (userEmail, resetToken) => {
             to: [{ email: userEmail }],
             subject: '🔑 Recuperación de Contraseña - MovieWave',
             htmlContent: `
-        <div style="font-family: Arial, sans-serif; color: #333;">
-          <h2 style="color:#8300BF;">Recupera tu contraseña</h2>
-          <p>Hola 👋, has solicitado restablecer tu contraseña en MovieWave.</p>
-          <p>Haz clic en el siguiente botón para restablecerla:</p>
-          <p>
-            <a href="${recoveryLink}" 
-               style="background-color: #8300BF; color: white; padding: 10px 20px;
-                      text-decoration: none; border-radius: 5px; display:inline-block;">
-              Restablecer Contraseña
-            </a>
-          </p>
-          <p>⚠️ Este enlace expira en 1 hora.</p>
-          <p>Si no solicitaste este cambio, simplemente ignora este correo.</p>
-          <hr />
-          <p style="font-size:12px;color:#999;">© ${new Date().getFullYear()} MovieWave</p>
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f5f9ff; color: #222; padding: 30px; border-radius: 10px;">
+          <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); padding: 30px;">
+            <h2 style="color:#0078d7; text-align:center;">🔐 Recupera tu contraseña</h2>
+            <p style="font-size:16px; line-height:1.5;">Hola 👋, has solicitado restablecer tu contraseña en <strong>MovieWave</strong>.</p>
+            <p style="font-size:16px; line-height:1.5;">Haz clic en el siguiente botón para restablecerla:</p>
+            <div style="text-align:center; margin: 30px 0;">
+              <a href="${recoveryLink}"
+                style="background-color:#009dff; color:#fff; padding: 12px 25px; border-radius:8px;
+                       text-decoration:none; font-weight:600; font-size:15px; display:inline-block;">
+                Restablecer Contraseña
+              </a>
+            </div>
+            <p style="font-size:15px; color:#444;">⚠️ Este enlace expira en 1 hora.</p>
+            <p style="font-size:15px; color:#444;">Si no solicitaste este cambio, simplemente ignora este correo.</p>
+            <hr style="border:none; border-top:1px solid #ddd; margin:30px 0;">
+            <p style="font-size:12px; color:#888; text-align:center;">© ${new Date().getFullYear()} MovieWave - Todos los derechos reservados</p>
+          </div>
         </div>
       `,
             textContent: `

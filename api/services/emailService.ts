@@ -4,51 +4,73 @@ import dotenv from 'dotenv';
 console.log('🔹 Cargando configuración de Brevo (Sendinblue)...');
 dotenv.config();
 
-// Configure Brevo API client
+// ======================================================
+// 🔹 VALIDACIÓN DE VARIABLES DE ENTORNO
+// ======================================================
+if (!process.env.BREVO_API_KEY) {
+  console.error('❌ BREVO_API_KEY no definida en el archivo .env');
+  throw new Error('Falta BREVO_API_KEY en variables de entorno');
+}
+
+if (!process.env.EMAIL_SENDER) {
+  console.warn('⚠️ EMAIL_SENDER no definida, usando remitente por defecto.');
+}
+
+if (!process.env.FRONTEND_URL) {
+  console.warn('⚠️ FRONTEND_URL no definida, usando http://localhost:5173.');
+}
+
+// ======================================================
+// 🔹 CONFIGURACIÓN DEL CLIENTE BREVO
+// ======================================================
 console.log('🔹 Inicializando cliente de Brevo...');
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
 const apiKey = defaultClient.authentications['api-key'];
 apiKey.apiKey = process.env.BREVO_API_KEY!;
-console.log('✅ Clave API configurada:', process.env.BREVO_API_KEY ? 'OK' : '❌ NO DEFINIDA');
+console.log('✅ Clave API configurada correctamente.');
 
 const brevoApi = new SibApiV3Sdk.TransactionalEmailsApi();
-console.log('✅ Cliente de correo Brevo inicializado correctamente.');
+console.log('✅ Cliente de correo Brevo inicializado.');
 
-/**
- * Send a password recovery email using the Brevo API
- */
+// ======================================================
+// 🔹 FUNCIÓN: Envío de correo de recuperación
+// ======================================================
 export const sendRecoveryEmail = async (userEmail: string, resetToken: string) => {
-  console.log('📩 [sendRecoveryEmail] Iniciando proceso para:', userEmail);
-  try {
-    console.log('🔄 Preparando envío de email a:', userEmail);
+  console.log('\n==============================');
+  console.log('📩 [sendRecoveryEmail] Iniciando proceso');
+  console.log('📧 Destinatario:', userEmail);
+  console.log('==============================');
 
-    // Use the frontend URL from an environment variable
+  try {
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    console.log('🌍 URL frontend detectada:', frontendUrl);
+    const senderEmail = process.env.EMAIL_SENDER || 'noreply@moviewave.app';
 
     const recoveryLink = `${frontendUrl}/resetpassword?token=${resetToken}&email=${encodeURIComponent(userEmail)}`;
     console.log('🔗 Enlace de recuperación generado:', recoveryLink);
 
+    const year = new Date().getFullYear();
     const sendSmtpEmail = {
-      sender: { email: process.env.EMAIL_SENDER || 'noreply@moviewave.app', name: 'MovieWave' },
+      sender: { email: senderEmail, name: 'MovieWave' },
       to: [{ email: userEmail }],
       subject: '🔑 Recuperación de Contraseña - MovieWave',
       htmlContent: `
-        <div style="font-family: Arial, sans-serif; color: #333;">
-          <h2 style="color:#8300BF;">Recupera tu contraseña</h2>
-          <p>Hola 👋, has solicitado restablecer tu contraseña en MovieWave.</p>
-          <p>Haz clic en el siguiente botón para restablecerla:</p>
-          <p>
-            <a href="${recoveryLink}" 
-               style="background-color: #8300BF; color: white; padding: 10px 20px;
-                      text-decoration: none; border-radius: 5px; display:inline-block;">
-              Restablecer Contraseña
-            </a>
-          </p>
-          <p>⚠️ Este enlace expira en 1 hora.</p>
-          <p>Si no solicitaste este cambio, simplemente ignora este correo.</p>
-          <hr />
-          <p style="font-size:12px;color:#999;">© ${new Date().getFullYear()} MovieWave</p>
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f5f9ff; color: #222; padding: 30px; border-radius: 10px;">
+          <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); padding: 30px;">
+            <h2 style="color:#0078d7; text-align:center;">🔐 Recupera tu contraseña</h2>
+            <p style="font-size:16px; line-height:1.5;">Hola 👋, has solicitado restablecer tu contraseña en <strong>MovieWave</strong>.</p>
+            <p style="font-size:16px; line-height:1.5;">Haz clic en el siguiente botón para restablecerla:</p>
+            <div style="text-align:center; margin: 30px 0;">
+              <a href="${recoveryLink}"
+                style="background-color:#009dff; color:#fff; padding: 12px 25px; border-radius:8px;
+                       text-decoration:none; font-weight:600; font-size:15px; display:inline-block;">
+                Restablecer Contraseña
+              </a>
+            </div>
+            <p style="font-size:15px; color:#444;">⚠️ Este enlace expira en 1 hora.</p>
+            <p style="font-size:15px; color:#444;">Si no solicitaste este cambio, simplemente ignora este correo.</p>
+            <hr style="border:none; border-top:1px solid #ddd; margin:30px 0;">
+            <p style="font-size:12px; color:#888; text-align:center;">© ${year} MovieWave - Todos los derechos reservados</p>
+          </div>
         </div>
       `,
       textContent: `
@@ -59,14 +81,27 @@ export const sendRecoveryEmail = async (userEmail: string, resetToken: string) =
         ${recoveryLink}
 
         Este enlace expira en 1 hora. Si no solicitaste esto, ignora este correo.
+
+        © ${year} MovieWave
       `,
     };
 
     console.log('📨 Enviando correo mediante Brevo...');
     const response = await brevoApi.sendTransacEmail(sendSmtpEmail);
-    console.log('✅ Email enviado correctamente con ID:', response?.messageId || 'OK');
+
+    console.log('✅ Email enviado correctamente.');
+    console.log('📬 Estado:', response?.response?.status || 'OK');
+    console.log('🆔 Message ID:', response?.messageId || 'N/A');
+    console.log('🕒 Fecha de envío:', new Date().toLocaleString());
+    console.log('==============================\n');
   } catch (error: any) {
-    console.error('❌ Error enviando correo:', error.message || error);
+    console.error('❌ Error al enviar correo de recuperación:');
+    if (error.response && error.response.body) {
+      console.error('📛 Código HTTP:', error.response.status);
+      console.error('📄 Detalle:', JSON.stringify(error.response.body, null, 2));
+    } else {
+      console.error('📄 Error genérico:', error.message || error);
+    }
     throw new Error(`Error al enviar email: ${error.message}`);
   }
 };

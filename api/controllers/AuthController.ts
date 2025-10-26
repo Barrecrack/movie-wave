@@ -4,16 +4,19 @@ import { sendRecoveryEmail } from '../services/emailService';
 import { Request, Response } from 'express';
 
 class AuthController {
+  // 🔹 Registro de usuario
   async register(req: Request, res: Response) {
     console.log('🟢 [REGISTER] Solicitud recibida con body:', req.body);
     const { email, password, name, lastname } = req.body;
+
     try {
-      console.log('🔹 Registrando usuario en Supabase...');
+      console.log('🔹 Registrando usuario en Supabase con role key...');
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { name, lastname } },
       });
+
       if (error) throw error;
       console.log('✅ Usuario registrado correctamente:', data.user?.email);
       res.status(201).json({ user: data.user });
@@ -23,13 +26,16 @@ class AuthController {
     }
   }
 
+  // 🔹 Inicio de sesión
   async login(req: Request, res: Response) {
     console.log('🟢 [LOGIN] Intento de inicio de sesión con email:', req.body.email);
     const { email, password } = req.body;
+
     try {
-      console.log('🔹 Autenticando usuario en Supabase...');
+      console.log('🔹 Autenticando usuario con role key...');
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+
       console.log('✅ Login exitoso para:', data.user?.email);
       res.json({ user: data.user, token: data.session?.access_token });
     } catch (error: any) {
@@ -38,9 +44,11 @@ class AuthController {
     }
   }
 
+  // 🔹 Actualización de datos de usuario
   async updateUser(req: Request, res: Response) {
     console.log('🟢 [UPDATE USER] Solicitud de actualización recibida.');
     const token = req.headers.authorization?.split(' ')[1];
+
     if (!token) {
       console.warn('⚠️ Token no proporcionado en cabecera Authorization.');
       return res.status(401).json({ error: 'Token requerido' });
@@ -49,6 +57,7 @@ class AuthController {
     try {
       console.log('🔹 Obteniendo usuario desde el token...');
       const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+
       if (userError || !user) {
         console.error('❌ No se pudo obtener usuario con el token.');
         return res.status(401).json({ error: 'Token inválido o expirado' });
@@ -75,16 +84,20 @@ class AuthController {
     }
   }
 
+  // 🔹 Solicitud de recuperación de contraseña
   async forgotPassword(req: Request, res: Response) {
     console.log('🟢 [FORGOT PASSWORD] Solicitud recibida para:', req.body.email);
     const { email } = req.body;
+
     try {
       console.log('🔹 Generando token de recuperación...');
       const resetToken = jwt.sign({ email }, process.env.JWT_SECRET || 'secret', {
         expiresIn: '1h',
       });
+
       console.log('🔹 Enviando correo de recuperación...');
       await sendRecoveryEmail(email, resetToken);
+
       console.log('✅ Correo de recuperación enviado correctamente.');
       res.json({ message: 'Correo de recuperación enviado' });
     } catch (error: any) {
@@ -93,6 +106,7 @@ class AuthController {
     }
   }
 
+  // 🔹 Restablecimiento de contraseña
   async resetPassword(req: Request, res: Response) {
     console.log('🟢 [RESET PASSWORD] Solicitud de reseteo recibida.');
     const { token, newPassword } = req.body;
