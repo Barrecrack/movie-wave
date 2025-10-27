@@ -31,6 +31,12 @@ router.post('/reset-password', (req, res) => {
   AuthController.resetPassword(req, res);
 });
 
+
+router.get('/user-profile', (req, res) => {
+  console.log('➡️ [GET] /user-profile');
+  AuthController.getUserProfile(req, res);
+});
+
 console.log('✅ Rutas de autenticación cargadas correctamente.');
 
 export default router;

@@ -37,7 +37,14 @@ class AuthController {
       if (error) throw error;
 
       console.log('✅ Login exitoso para:', data.user?.email);
-      res.json({ user: data.user, token: data.session?.access_token });
+
+      // Devolver información completa para sincronización
+      res.json({
+        user: data.user,
+        session: data.session,  // ← Incluir la sesión completa
+        token: data.session?.access_token,
+        refresh_token: data.session?.refresh_token // ← Importante para sincronización
+      });
     } catch (error: any) {
       console.error('❌ Error en login:', error.message);
       res.status(500).json({ error: 'Error al iniciar sesión' });
@@ -142,6 +149,33 @@ class AuthController {
       console.error('❌ Error en reset-password:', error.message);
       console.error('📛 Stack:', error.stack);
       res.status(500).json({ error: error.message });
+    }
+  }
+
+  async getUserProfile(req: Request, res: Response) {
+    console.log('🟢 [GET USER PROFILE] Solicitud recibida');
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ error: 'Token requerido' });
+    }
+
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+
+      if (error || !user) {
+        return res.status(401).json({ error: 'Token inválido o expirado' });
+      }
+
+      // Devolver datos del perfil
+      res.json({
+        name: user.user_metadata?.name || '',
+        lastname: user.user_metadata?.lastname || '',
+        email: user.email || '',
+      });
+    } catch (error: any) {
+      console.error('❌ Error obteniendo perfil:', error.message);
+      res.status(500).json({ error: 'Error al obtener perfil' });
     }
   }
 }
