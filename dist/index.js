@@ -9,6 +9,7 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("./middlewares/cors"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const videosRoutes_1 = __importDefault(require("./routes/videosRoutes"));
+const favoriteRoutes_1 = __importDefault(require("./routes/favoriteRoutes"));
 const app = (0, express_1.default)();
 const port = process.env.PORT || 3000;
 app.use(cors_1.default);
@@ -26,6 +27,7 @@ app.get('/debug', (_, res) => {
         serviceRoleKey: process.env.SERVICE_ROLE_KEY ? "✅ Configurada" : "❌ No configurada"
     });
 });
+app.use('/api/favorites', favoriteRoutes_1.default);
 app.use('/api', authRoutes_1.default);
 app.use('/videos', videosRoutes_1.default);
 app.listen(port, () => {
