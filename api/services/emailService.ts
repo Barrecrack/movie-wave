@@ -5,7 +5,7 @@ console.log('🔹 Cargando configuración de Brevo (Sendinblue)...');
 dotenv.config();
 
 // ======================================================
-// 🔹 VALIDACIÓN DE VARIABLES DE ENTORNO
+// 🔹 VALIDATION OF ENVIRONMENT VARIABLES
 // ======================================================
 if (!process.env.BREVO_API_KEY) {
   console.error('❌ BREVO_API_KEY no definida en el archivo .env');
@@ -21,7 +21,7 @@ if (!process.env.FRONTEND_URL) {
 }
 
 // ======================================================
-// 🔹 CONFIGURACIÓN DEL CLIENTE BREVO
+// 🔹 BREVO CLIENT CONFIGURATION
 // ======================================================
 console.log('🔹 Inicializando cliente de Brevo...');
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
@@ -32,9 +32,17 @@ console.log('✅ Clave API configurada correctamente.');
 const brevoApi = new SibApiV3Sdk.TransactionalEmailsApi();
 console.log('✅ Cliente de correo Brevo inicializado.');
 
-// ======================================================
-// 🔹 FUNCIÓN: Envío de correo de recuperación
-// ======================================================
+/**
+ * @function sendRecoveryEmail
+ * @description Sends a password recovery email to the user using the Brevo (Sendinblue) transactional email service.
+ * @param {string} userEmail - The recipient's email address.
+ * @param {string} resetToken - The unique password reset token used to generate the recovery link.
+ * @returns {Promise<void>} Returns a promise that resolves when the email is successfully sent.
+ * @throws {Error} Throws an error if there is any issue while sending the recovery email.
+ * 
+ * @example
+ * await sendRecoveryEmail('user@example.com', '123456abcdef');
+ */
 export const sendRecoveryEmail = async (userEmail: string, resetToken: string) => {
   console.log('\n==============================');
   console.log('📩 [sendRecoveryEmail] Iniciando proceso');

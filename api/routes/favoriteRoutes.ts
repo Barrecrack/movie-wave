@@ -4,7 +4,12 @@ import { Request, Response } from 'express';
 
 const router = express.Router();
 
-// 🔹 Obtener todos los favoritos del usuario con información del contenido
+/**
+ * @route GET /:userId
+ * @description Get all favorites for a specific user with related content information.
+ * @param {string} userId - The ID of the user whose favorites will be retrieved.
+ * @returns {Array} List of favorite items including their content details.
+ */
 router.get('/:userId', async (req: Request, res: Response) => {
   console.log('🟢 [GET FAVORITES] Obteniendo favoritos para usuario:', req.params.userId);
   
@@ -52,13 +57,19 @@ router.get('/:userId', async (req: Request, res: Response) => {
   }
 });
 
-// 🔹 Agregar a favoritos
+/**
+ * @route POST /
+ * @description Add a new favorite for a user. Checks if the content exists and if it is already in favorites.
+ * @body {string} id_usuario - User ID.
+ * @body {string} id_contenido - Content ID to add to favorites.
+ * @returns {Object} The newly added favorite with content details.
+ */
 router.post('/', async (req: Request, res: Response) => {
   console.log('🟢 [ADD FAVORITE] Agregando favorito:', req.body);
   const { id_usuario, id_contenido } = req.body;
 
   try {
-    // Verificar si el contenido existe
+    // Check if the content exists
     const { data: contenido, error: contenidoError } = await supabase
       .from('Contenido')
       .select('*')
@@ -70,7 +81,7 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Contenido no encontrado' });
     }
 
-    // Verificar si ya existe en favoritos
+    // Check if it already exists in favorites
     const { data: existing } = await supabase
       .from('Favoritos')
       .select('*')
@@ -83,7 +94,7 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Ya está en favoritos' });
     }
 
-    // Agregar a favoritos
+    // Add to favorites
     const { data, error } = await supabase
       .from('Favoritos')
       .insert([
@@ -117,7 +128,13 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// 🔹 Eliminar de favoritos
+/**
+ * @route DELETE /:userId/:contentId
+ * @description Remove a specific favorite for a user by content ID.
+ * @param {string} userId - The user ID.
+ * @param {string} contentId - The content ID to remove from favorites.
+ * @returns {Object} Confirmation message.
+ */
 router.delete('/:userId/:contentId', async (req: Request, res: Response) => {
   console.log('🟢 [DELETE FAVORITE] Eliminando favorito:', req.params);
   
@@ -154,7 +171,13 @@ router.delete('/:userId/:contentId', async (req: Request, res: Response) => {
   }
 });
 
-// 🔹 Verificar si una película está en favoritos
+/**
+ * @route GET /:userId/:contentId/check
+ * @description Check whether a specific content item is already in a user's favorites.
+ * @param {string} userId - User ID.
+ * @param {string} contentId - Content ID to check.
+ * @returns {Object} Boolean indicating if the content is a favorite.
+ */
 router.get('/:userId/:contentId/check', async (req: Request, res: Response) => {
   console.log('🟢 [CHECK FAVORITE] Verificando favorito:', req.params);
   
@@ -166,7 +189,7 @@ router.get('/:userId/:contentId/check', async (req: Request, res: Response) => {
       .eq('id_contenido', req.params.contentId)
       .single();
 
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no encontrado
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
     
     res.json({ isFavorite: !!data });
   } catch (error: any) {

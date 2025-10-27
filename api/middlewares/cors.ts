@@ -2,7 +2,10 @@ import cors, { CorsOptions } from 'cors';
 
 console.log('🔹 Configurando CORS...');
 
-// Mostrar las URLs permitidas
+/**
+ * @description Parse allowed frontend origins from environment variable FRONTEND_URL.
+ * If not defined, defaults to localhost:5173.
+ */
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',')
       .map(url => url.trim().replace(/\/$/, ''))
@@ -11,7 +14,10 @@ const allowedOrigins = process.env.FRONTEND_URL
 
 console.log('✅ Orígenes permitidos:', allowedOrigins);
 
-// Configuración de CORS (extraído de index.ts)
+/**
+ * @description Define CORS options for allowed origins, methods, headers, and credentials.
+ * Includes dynamic origin validation and logging for debugging.
+ */
 const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
     console.log('🌍 Solicitud CORS desde origen:', origin || '(sin origen)');
@@ -36,4 +42,7 @@ const corsOptions: CorsOptions = {
 
 console.log('✅ Middleware CORS configurado correctamente.');
 
+/**
+ * @description Export configured CORS middleware to be used in Express app.
+ */
 export default cors(corsOptions);
