@@ -9,41 +9,57 @@ const router = express_1.default.Router();
 router.get('/:userId', async (req, res) => {
     console.log('🟢 [GET FAVORITES] Obteniendo favoritos para usuario:', req.params.userId);
     try {
-        console.log('🔹 Ejecutando consulta Supabase...');
-        const { data, error } = await supabase_1.supabase
-            .from('Favoritos')
-            .select(`
-        *,
-        Contenido:id_contenido (
-          id_contenido,
-          titulo,
-          poster,
-          genero,
-          año,
-          descripcion,
-          duracion,
-          video_url
-        )
-      `)
-            .eq('id_usuario', req.params.userId);
-        if (error) {
-            console.error('❌ ERROR SUPABASE DETALLADO:', {
-                message: error.message,
-                details: error.details,
-                hint: error.hint,
-                code: error.code
-            });
-            throw error;
+        console.log('🔹 Ejecutando consulta SIMPLIFICADA...');
+        const userId = parseInt(req.params.userId);
+        if (isNaN(userId)) {
+            return res.status(400).json({ error: 'ID de usuario inválido' });
         }
-        console.log(`✅ ${data?.length || 0} favoritos encontrados`);
-        res.json(data || []);
+        const { data: favoritos, error: favError } = await supabase_1.supabase
+            .from('Favoritos')
+            .select('*')
+            .eq('id_usuario', userId);
+        if (favError) {
+            console.error('❌ Error obteniendo favoritos:', favError);
+            throw favError;
+        }
+        console.log(`✅ ${favoritos?.length || 0} favoritos encontrados`);
+        if (!favoritos || favoritos.length === 0) {
+            return res.json([]);
+        }
+        const contenidoIds = favoritos.map(fav => fav.id_contenido);
+        console.log('🔹 IDs de contenido a buscar:', contenidoIds);
+        const { data: contenidos, error: contError } = await supabase_1.supabase
+            .from('Contenido')
+            .select('*')
+            .in('id_contenido', contenidoIds);
+        if (contError) {
+            console.error('❌ Error obteniendo contenidos:', contError);
+            throw contError;
+        }
+        console.log(`✅ ${contenidos?.length || 0} contenidos encontrados`);
+        const resultado = favoritos.map(fav => {
+            const contenido = contenidos?.find(cont => cont.id_contenido === fav.id_contenido);
+            return {
+                id_usuario: fav.id_usuario,
+                id_contenido: fav.id_contenido,
+                fecha_agregado: fav.fecha_agregado,
+                Contenido: contenido ? {
+                    id_contenido: contenido.id_contenido,
+                    titulo: contenido.titulo,
+                    poster: contenido.poster,
+                    genero: contenido.genero,
+                    año: contenido.año,
+                    descripcion: contenido.descripcion,
+                    duracion: contenido.duracion,
+                    video_url: contenido.video_url
+                } : null
+            };
+        });
+        console.log('✅ Datos combinados correctamente');
+        res.json(resultado);
     }
     catch (error) {
-        console.error('❌ ERROR COMPLETO obteniendo favoritos:', {
-            message: error.message,
-            stack: error.stack,
-            code: error.code
-        });
+        console.error('❌ ERROR obteniendo favoritos:', error);
         res.status(500).json({
             error: 'Error al obtener favoritos',
             details: error.message
@@ -54,21 +70,20 @@ router.post('/', async (req, res) => {
     console.log('🟢 [ADD FAVORITE] Agregando favorito:', req.body);
     const { id_usuario, id_contenido } = req.body;
     try {
-        const { data: contenido, error: contenidoError } = await supabase_1.supabase
-            .from('Contenido')
-            .select('*')
-            .eq('id_contenido', id_contenido)
-            .single();
-        if (contenidoError) {
-            console.error('❌ Contenido no encontrado:', contenidoError);
-            return res.status(404).json({ error: 'Contenido no encontrado' });
+        const userId = parseInt(id_usuario);
+        if (isNaN(userId)) {
+            return res.status(400).json({ error: 'ID de usuario inválido' });
         }
-        const { data: existing } = await supabase_1.supabase
+        const { data: existing, error: checkError } = await supabase_1.supabase
             .from('Favoritos')
             .select('*')
-            .eq('id_usuario', id_usuario)
+            .eq('id_usuario', userId)
             .eq('id_contenido', id_contenido)
             .single();
+        if (checkError && checkError.code !== 'PGRST116') {
+            console.error('❌ Error verificando favorito existente:', checkError);
+            throw checkError;
+        }
         if (existing) {
             console.log('⚠️ Ya existe en favoritos');
             return res.status(400).json({ error: 'Ya está en favoritos' });
@@ -77,26 +92,16 @@ router.post('/', async (req, res) => {
             .from('Favoritos')
             .insert([
             {
-                id_usuario,
-                id_contenido,
+                id_usuario: userId,
+                id_contenido: id_contenido,
                 fecha_agregado: new Date().toISOString()
             }
         ])
-            .select(`
-        *,
-        Contenido:id_contenido (
-          id_contenido,
-          titulo,
-          poster,
-          genero,
-          año,
-          descripcion,
-          duracion,
-          video_url
-        )
-      `);
-        if (error)
+            .select();
+        if (error) {
+            console.error('❌ Error agregando favorito:', error);
             throw error;
+        }
         console.log('✅ Favorito agregado correctamente');
         res.status(201).json(data[0]);
     }
@@ -109,51 +114,29 @@ router.delete('/:userId/:contentId', async (req, res) => {
     console.log('🟢 [DELETE FAVORITE] Eliminando favorito:', req.params);
     try {
         console.log('🔹 Ejecutando DELETE en Supabase...');
+        const userId = parseInt(req.params.userId);
+        const contentId = parseInt(req.params.contentId);
+        if (isNaN(userId) || isNaN(contentId)) {
+            return res.status(400).json({ error: 'IDs inválidos' });
+        }
         const { error } = await supabase_1.supabase
             .from('Favoritos')
             .delete()
-            .eq('id_usuario', req.params.userId)
-            .eq('id_contenido', req.params.contentId);
+            .eq('id_usuario', userId)
+            .eq('id_contenido', contentId);
         if (error) {
-            console.error('❌ ERROR SUPABASE DETALLADO (DELETE):', {
-                message: error.message,
-                details: error.details,
-                hint: error.hint,
-                code: error.code
-            });
+            console.error('❌ Error eliminando favorito:', error);
             throw error;
         }
         console.log('✅ Favorito eliminado correctamente');
         res.json({ message: 'Favorito eliminado' });
     }
     catch (error) {
-        console.error('❌ ERROR COMPLETO eliminando favorito:', {
-            message: error.message,
-            stack: error.stack,
-            code: error.code
-        });
+        console.error('❌ ERROR eliminando favorito:', error);
         res.status(500).json({
             error: 'Error al eliminar favorito',
             details: error.message
         });
-    }
-});
-router.get('/:userId/:contentId/check', async (req, res) => {
-    console.log('🟢 [CHECK FAVORITE] Verificando favorito:', req.params);
-    try {
-        const { data, error } = await supabase_1.supabase
-            .from('Favoritos')
-            .select('*')
-            .eq('id_usuario', req.params.userId)
-            .eq('id_contenido', req.params.contentId)
-            .single();
-        if (error && error.code !== 'PGRST116')
-            throw error;
-        res.json({ isFavorite: !!data });
-    }
-    catch (error) {
-        console.error('❌ Error verificando favorito:', error.message);
-        res.status(500).json({ error: 'Error al verificar favorito' });
     }
 });
 exports.default = router;
