@@ -9,6 +9,7 @@ const router = express_1.default.Router();
 router.get('/:userId', async (req, res) => {
     console.log('🟢 [GET FAVORITES] Obteniendo favoritos para usuario:', req.params.userId);
     try {
+        console.log('🔹 Ejecutando consulta Supabase...');
         const { data, error } = await supabase_1.supabase
             .from('Favoritos')
             .select(`
@@ -25,14 +26,28 @@ router.get('/:userId', async (req, res) => {
         )
       `)
             .eq('id_usuario', req.params.userId);
-        if (error)
+        if (error) {
+            console.error('❌ ERROR SUPABASE DETALLADO:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+            });
             throw error;
+        }
         console.log(`✅ ${data?.length || 0} favoritos encontrados`);
         res.json(data || []);
     }
     catch (error) {
-        console.error('❌ Error obteniendo favoritos:', error.message);
-        res.status(500).json({ error: 'Error al obtener favoritos' });
+        console.error('❌ ERROR COMPLETO obteniendo favoritos:', {
+            message: error.message,
+            stack: error.stack,
+            code: error.code
+        });
+        res.status(500).json({
+            error: 'Error al obtener favoritos',
+            details: error.message
+        });
     }
 });
 router.post('/', async (req, res) => {
@@ -93,19 +108,34 @@ router.post('/', async (req, res) => {
 router.delete('/:userId/:contentId', async (req, res) => {
     console.log('🟢 [DELETE FAVORITE] Eliminando favorito:', req.params);
     try {
+        console.log('🔹 Ejecutando DELETE en Supabase...');
         const { error } = await supabase_1.supabase
             .from('Favoritos')
             .delete()
             .eq('id_usuario', req.params.userId)
             .eq('id_contenido', req.params.contentId);
-        if (error)
+        if (error) {
+            console.error('❌ ERROR SUPABASE DETALLADO (DELETE):', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+            });
             throw error;
+        }
         console.log('✅ Favorito eliminado correctamente');
         res.json({ message: 'Favorito eliminado' });
     }
     catch (error) {
-        console.error('❌ Error eliminando favorito:', error.message);
-        res.status(500).json({ error: 'Error al eliminar favorito' });
+        console.error('❌ ERROR COMPLETO eliminando favorito:', {
+            message: error.message,
+            stack: error.stack,
+            code: error.code
+        });
+        res.status(500).json({
+            error: 'Error al eliminar favorito',
+            details: error.message
+        });
     }
 });
 router.get('/:userId/:contentId/check', async (req, res) => {
