@@ -36,7 +36,12 @@ class AuthController {
             if (error)
                 throw error;
             console.log('✅ Login exitoso para:', data.user?.email);
-            res.json({ user: data.user, token: data.session?.access_token });
+            res.json({
+                user: data.user,
+                session: data.session,
+                token: data.session?.access_token,
+                refresh_token: data.session?.refresh_token
+            });
         }
         catch (error) {
             console.error('❌ Error en login:', error.message);
@@ -127,6 +132,28 @@ class AuthController {
             console.error('❌ Error en reset-password:', error.message);
             console.error('📛 Stack:', error.stack);
             res.status(500).json({ error: error.message });
+        }
+    }
+    async getUserProfile(req, res) {
+        console.log('🟢 [GET USER PROFILE] Solicitud recibida');
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) {
+            return res.status(401).json({ error: 'Token requerido' });
+        }
+        try {
+            const { data: { user }, error } = await supabase_1.supabase.auth.getUser(token);
+            if (error || !user) {
+                return res.status(401).json({ error: 'Token inválido o expirado' });
+            }
+            res.json({
+                name: user.user_metadata?.name || '',
+                lastname: user.user_metadata?.lastname || '',
+                email: user.email || '',
+            });
+        }
+        catch (error) {
+            console.error('❌ Error obteniendo perfil:', error.message);
+            res.status(500).json({ error: 'Error al obtener perfil' });
         }
     }
 }
