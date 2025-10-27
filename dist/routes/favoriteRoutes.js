@@ -105,33 +105,36 @@ router.post('/', async (req, res) => {
         res.status(500).json({ error: 'Error al agregar favorito' });
     }
 });
-router.delete("/", async (req, res) => {
+router.delete('/:userId/:contentId', async (req, res) => {
+    console.log('🟢 [DELETE FAVORITE] Eliminando favorito:', req.params);
     try {
-        const { userId, contentId } = req.body;
-        console.log("🗑️ Request to delete favorite:", { userId, contentId });
-        const { data, error } = await supabase_1.supabase
-            .from("Favoritos")
+        console.log('🔹 Ejecutando DELETE en Supabase...');
+        const { error } = await supabase_1.supabase
+            .from('Favoritos')
             .delete()
-            .match({ id_usuario: userId, id_contenido: contentId })
-            .select();
+            .eq('id_usuario', req.params.userId)
+            .eq('id_contenido', req.params.contentId);
         if (error) {
-            console.error("❌ Error deleting favorite:", error.message);
-            return res
-                .status(500)
-                .json({ error: "Error deleting favorite", details: error.message });
+            console.error('❌ ERROR SUPABASE DETALLADO (DELETE):', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+            });
+            throw error;
         }
-        if (!data || data.length === 0) {
-            console.warn("⚠️ No favorite found to delete");
-            return res.status(404).json({ error: "Favorite not found" });
-        }
-        console.log("✅ Favorite deleted successfully:", data);
-        res.json({ message: "Favorite deleted", deleted: data });
+        console.log('✅ Favorito eliminado correctamente');
+        res.json({ message: 'Favorito eliminado' });
     }
     catch (error) {
-        console.error("💥 Unexpected error deleting favorite:", error);
+        console.error('❌ ERROR COMPLETO eliminando favorito:', {
+            message: error.message,
+            stack: error.stack,
+            code: error.code
+        });
         res.status(500).json({
-            error: "Unexpected error deleting favorite",
-            details: error.message,
+            error: 'Error al eliminar favorito',
+            details: error.message
         });
     }
 });
