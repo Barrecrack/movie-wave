@@ -1,10 +1,28 @@
+/**
+ * @file AuthController.js
+ * @description Handles all authentication-related operations such as user registration, login,
+ * profile updates, password recovery, and password reset using Supabase authentication and JWT.
+ */
+
 import { supabase } from '../config/supabase';
 import jwt from 'jsonwebtoken';
 import { sendRecoveryEmail } from '../services/emailService';
 import { Request, Response } from 'express';
 
+/**
+ * @class AuthController
+ * @classdesc Controller that manages authentication and user-related actions using Supabase.
+ */
 class AuthController {
-  // 🔹 Registro de usuario
+  /**
+   * Registers a new user in Supabase.
+   * 
+   * @async
+   * @function register
+   * @param {Request} req - Express request object containing email, password, name, and lastname.
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>} Responds with the created user or an error message.
+   */
   async register(req: Request, res: Response) {
     console.log('🟢 [REGISTER] Solicitud recibida con body:', req.body);
     const { email, password, name, lastname } = req.body;
@@ -26,7 +44,15 @@ class AuthController {
     }
   }
 
-  // 🔹 Inicio de sesión
+  /**
+   * Logs in a user with email and password credentials.
+   * 
+   * @async
+   * @function login
+   * @param {Request} req - Express request containing email and password.
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>} Returns the authenticated user, session, and JWT tokens.
+   */
   async login(req: Request, res: Response) {
     console.log('🟢 [LOGIN] Intento de inicio de sesión con email:', req.body.email);
     const { email, password } = req.body;
@@ -38,12 +64,11 @@ class AuthController {
 
       console.log('✅ Login exitoso para:', data.user?.email);
 
-      // Devolver información completa para sincronización
       res.json({
         user: data.user,
-        session: data.session,  // ← Incluir la sesión completa
+        session: data.session,
         token: data.session?.access_token,
-        refresh_token: data.session?.refresh_token // ← Importante para sincronización
+        refresh_token: data.session?.refresh_token
       });
     } catch (error: any) {
       console.error('❌ Error en login:', error.message);
@@ -51,7 +76,16 @@ class AuthController {
     }
   }
 
-  // 🔹 Actualización de datos de usuario
+  /**
+   * Updates user information such as name, lastname, email, or password.
+   * Requires a valid authentication token.
+   * 
+   * @async
+   * @function updateUser
+   * @param {Request} req - Express request containing the token and updated user data.
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>} Returns the updated user data or an error message.
+   */
   async updateUser(req: Request, res: Response) {
     console.log('🟢 [UPDATE USER] Solicitud de actualización recibida.');
     const token = req.headers.authorization?.split(' ')[1];
@@ -91,7 +125,16 @@ class AuthController {
     }
   }
 
-  // 🔹 Solicitud de recuperación de contraseña
+  /**
+   * Sends a password recovery email to the user.
+   * Generates a JWT token valid for one hour and sends it via email.
+   * 
+   * @async
+   * @function forgotPassword
+   * @param {Request} req - Express request containing the user's email.
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>} Returns a success message or an error.
+   */
   async forgotPassword(req: Request, res: Response) {
     console.log('🟢 [FORGOT PASSWORD] Solicitud recibida para:', req.body.email);
     const { email } = req.body;
@@ -113,7 +156,15 @@ class AuthController {
     }
   }
 
-  // 🔹 Restablecimiento de contraseña
+  /**
+   * Resets the user's password using a valid JWT token.
+   * 
+   * @async
+   * @function resetPassword
+   * @param {Request} req - Express request containing the token and new password.
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>} Returns success or error messages.
+   */
   async resetPassword(req: Request, res: Response) {
     console.log('🟢 [RESET PASSWORD] Solicitud de reseteo recibida.');
     const { token, newPassword } = req.body;
@@ -152,6 +203,15 @@ class AuthController {
     }
   }
 
+  /**
+   * Retrieves the authenticated user's profile data using the provided token.
+   * 
+   * @async
+   * @function getUserProfile
+   * @param {Request} req - Express request containing the authorization token.
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>} Returns the user's profile data or an error message.
+   */
   async getUserProfile(req: Request, res: Response) {
     console.log('🟢 [GET USER PROFILE] Solicitud recibida');
     const token = req.headers.authorization?.split(' ')[1];
@@ -167,7 +227,6 @@ class AuthController {
         return res.status(401).json({ error: 'Token inválido o expirado' });
       }
 
-      // Devolver datos del perfil
       res.json({
         name: user.user_metadata?.name || '',
         lastname: user.user_metadata?.lastname || '',

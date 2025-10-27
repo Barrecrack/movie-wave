@@ -4,13 +4,20 @@ import dotenv from "dotenv";
 dotenv.config();
 const router = express.Router();
 
-// ✅ Buscar videos desde Pexels
+/**
+ * @route GET /search
+ * @description Fetches videos from the Pexels API based on a user query or returns popular genres if no query is provided.
+ * @access Public
+ * @example
+ * // Example request: GET /videos/search?query=mountains
+ * @returns {Object[]} Array of formatted video objects with id, title, genre, year, poster, and videoUrl.
+ */
 router.get("/search", async (req, res) => {
   try {
     const query = (req.query.query as string)?.trim().toLowerCase() || "popular";
     const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
 
-    // 🔹 Validar que exista la API key
+    // 🔹 Validate that the API key exists
     if (!PEXELS_API_KEY) {
       console.error("❌ PEXELS_API_KEY no configurada");
       return res.status(500).json({ error: "Configuración del servidor incompleta" });
@@ -18,7 +25,7 @@ router.get("/search", async (req, res) => {
 
     console.log(`🔍 Buscando videos: "${query}"`);
 
-    // 🔹 Si el usuario busca algo específico, usamos solo ese término
+    // 🔹 If the user searches for something specific, we use only that term.
     if (query !== "popular") {
       const response = await fetch(
         `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=12`,
@@ -50,7 +57,7 @@ router.get("/search", async (req, res) => {
       return res.json(formatted);
     }
 
-    // 🔹 Si no hay búsqueda específica ("popular"), mostramos varios géneros
+    // 🔹 If there is no specific search ("popular"), we show several genres
     const genres = ["action", "comedy", "romance", "horror", "sci-fi", "adventure", "animation"];
     
     console.log(`🎬 Cargando videos populares de géneros: ${genres.join(", ")}`);
@@ -91,7 +98,7 @@ router.get("/search", async (req, res) => {
       })
     );
 
-    // 🔹 Unimos todos los géneros en una sola lista
+    // 🔹 We unite all genres in a single list
     const formatted = allResults.flat();
     console.log(`🎉 Total de videos cargados: ${formatted.length}`);
 
@@ -103,7 +110,12 @@ router.get("/search", async (req, res) => {
   }
 });
 
-// ✅ Endpoint de salud para verificar que la ruta funciona
+/**
+ * @route GET /health
+ * @description Health check endpoint to verify if the video route and Pexels API key are configured correctly.
+ * @access Public
+ * @returns {Object} JSON response containing the service status and API key configuration status.
+ */
 router.get("/health", (req, res) => {
   res.json({ 
     status: "OK", 

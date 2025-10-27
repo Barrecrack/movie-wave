@@ -4,22 +4,43 @@ dotenv.config();
 import express, { Request, Response } from 'express';
 import corsMiddleware from './middlewares/cors';
 import authRoutes from './routes/authRoutes';
-import videosRoutes from './routes/videosRoutes'; // ✅ Importar la nueva ruta
+import videosRoutes from './routes/videosRoutes'; 
 import favoriteRoutes from './routes/favoriteRoutes';
 
-// Configurar Express
+/**
+ * @fileoverview Entry point for the Express server configuration.
+ * Loads environment variables, initializes middleware, and mounts routes for authentication, videos, and favorites.
+ */
+
+/**
+ * @constant app
+ * @description Express application instance.
+ */
 const app = express();
+
+/**
+ * @constant port
+ * @description Server port number from environment variables or default (3000).
+ */
 const port = process.env.PORT || 3000;
 
 app.use(corsMiddleware);
 app.use(express.json());
 
-// Ruta principal
+/**
+ * @route GET /
+ * @description Root route to confirm the server is running and connected to Supabase, Brevo API, and Pexels.
+ * @returns {string} Confirmation message.
+ */
 app.get('/', (_: Request, res: Response) => {
   res.send('🚀 Servidor Express conectado a Supabase, Brevo API y Pexels listo.');
 });
 
-// ✅ Ruta de debugging
+/**
+ * @route GET /debug
+ * @description Debug route to check environment configuration and API keys.
+ * @returns {object} JSON with configuration status.
+ */
 app.get('/debug', (_: Request, res: Response) => {
   res.json({
     environment: process.env.NODE_ENV,
@@ -31,14 +52,28 @@ app.get('/debug', (_: Request, res: Response) => {
   });
 });
 
-//Ruta de favoritos
+/**
+ * @route /api/favorites
+ * @description Routes related to user's favorite content management.
+ */
 app.use('/api/favorites', favoriteRoutes);
 
-// ✅ Montar rutas
+/**
+ * @route /api
+ * @description Routes for user authentication and management.
+ */
 app.use('/api', authRoutes);
-app.use('/videos', videosRoutes); // ✅ Ruta de videos agregada
 
-// Iniciar servidor
+/**
+ * @route /videos
+ * @description Routes to interact with Pexels API for fetching videos.
+ */
+app.use('/videos', videosRoutes);
+
+/**
+ * @function app.listen
+ * @description Starts the Express server and logs accessible routes.
+ */
 app.listen(port, () => {
   console.log(`🌐 Servidor corriendo en http://localhost:${port}`);
   console.log(`🔍 Ruta de debug disponible en: http://localhost:${port}/debug`);
