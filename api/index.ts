@@ -5,6 +5,7 @@ import express, { Request, Response } from 'express';
 import corsMiddleware from './middlewares/cors';
 import authRoutes from './routes/authRoutes';
 import videosRoutes from './routes/videosRoutes'; // ✅ Importar la nueva ruta
+import favoriteRoutes from './routes/favoriteRoutes';
 
 // Configurar Express
 const app = express();
@@ -29,6 +30,9 @@ app.get('/debug', (_: Request, res: Response) => {
     serviceRoleKey: process.env.SERVICE_ROLE_KEY ? "✅ Configurada" : "❌ No configurada"
   });
 });
+
+//Ruta de favoritos
+app.use('/api/favorites', favoriteRoutes);
 
 // ✅ Montar rutas
 app.use('/api', authRoutes);
