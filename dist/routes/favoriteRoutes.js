@@ -58,12 +58,15 @@ router.post('/', async (req, res) => {
             return res.status(401).json({ error: 'Token inválido' });
         }
         const { id_contenido } = req.body;
-        const id_usuario = user.id;
+        const idContenidoNum = parseInt(id_contenido);
+        if (isNaN(idContenidoNum)) {
+            return res.status(400).json({ error: 'ID de contenido inválido' });
+        }
         const { data: existing } = await supabase_1.supabase
             .from('Favoritos')
             .select('*')
-            .eq('id_usuario', id_usuario)
-            .eq('id_contenido', id_contenido)
+            .eq('id_usuario', user.id)
+            .eq('id_contenido', idContenidoNum)
             .single();
         if (existing) {
             console.log('⚠️ Ya existe en favoritos');
@@ -73,14 +76,21 @@ router.post('/', async (req, res) => {
             .from('Favoritos')
             .insert([
             {
-                id_usuario: parseInt(id_usuario),
-                id_contenido: parseInt(id_contenido),
+                id_usuario: user.id,
+                id_contenido: idContenidoNum,
                 fecha_agregado: new Date().toISOString()
             }
         ])
             .select('*');
-        if (error)
+        if (error) {
+            console.error('❌ ERROR SUPABASE DETALLADO (INSERT):', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+            });
             throw error;
+        }
         console.log('✅ Favorito agregado correctamente');
         res.status(201).json(data[0]);
     }
@@ -100,12 +110,16 @@ router.delete('/:contentId', async (req, res) => {
             return res.status(401).json({ error: 'Token inválido' });
         }
         console.log('🟢 [DELETE FAVORITE] Eliminando favorito:', req.params);
+        const contentIdNum = parseInt(req.params.contentId);
+        if (isNaN(contentIdNum)) {
+            return res.status(400).json({ error: 'ID de contenido inválido' });
+        }
         console.log('🔹 Ejecutando DELETE en Supabase...');
         const { error } = await supabase_1.supabase
             .from('Favoritos')
             .delete()
             .eq('id_usuario', user.id)
-            .eq('id_contenido', req.params.contentId);
+            .eq('id_contenido', contentIdNum);
         if (error) {
             console.error('❌ ERROR SUPABASE DETALLADO (DELETE):', {
                 message: error.message,
@@ -141,11 +155,15 @@ router.get('/check/:contentId', async (req, res) => {
             return res.status(401).json({ error: 'Token inválido' });
         }
         console.log('🟢 [CHECK FAVORITE] Verificando favorito:', req.params);
+        const contentIdNum = parseInt(req.params.contentId);
+        if (isNaN(contentIdNum)) {
+            return res.status(400).json({ error: 'ID de contenido inválido' });
+        }
         const { data, error } = await supabase_1.supabase
             .from('Favoritos')
             .select('*')
             .eq('id_usuario', user.id)
-            .eq('id_contenido', req.params.contentId)
+            .eq('id_contenido', contentIdNum)
             .single();
         if (error && error.code !== 'PGRST116')
             throw error;
