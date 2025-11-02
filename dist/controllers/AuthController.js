@@ -7,15 +7,31 @@ const supabase_1 = require("../config/supabase");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const emailService_1 = require("../services/emailService");
 class AuthController {
+    calculateAge(birthDate) {
+        const today = new Date();
+        const birth = new Date(birthDate);
+        let age = today.getFullYear() - birth.getFullYear();
+        const monthDiff = today.getMonth() - birth.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+            age--;
+        }
+        return age;
+    }
     async register(req, res) {
         console.log('🟢 [REGISTER] Solicitud recibida con body:', req.body);
-        const { email, password, name, lastname } = req.body;
+        const { email, password, name, lastname, birthdate } = req.body;
         try {
             console.log('🔹 Registrando usuario en Supabase con role key...');
             const { data, error } = await supabase_1.supabase.auth.signUp({
                 email,
                 password,
-                options: { data: { name, lastname } },
+                options: {
+                    data: {
+                        name,
+                        lastname,
+                        birthdate
+                    }
+                },
             });
             if (error)
                 throw error;
@@ -62,7 +78,7 @@ class AuthController {
                 console.error('❌ No se pudo obtener usuario con el token.');
                 return res.status(401).json({ error: 'Token inválido o expirado' });
             }
-            const { name, lastname, email, password } = req.body;
+            const { name, lastname, email, password, birthdate } = req.body;
             console.log('🔹 Actualizando datos del usuario:', user.email);
             const { data, error } = await supabase_1.supabase.auth.updateUser({
                 email: email || user.email,
@@ -70,6 +86,7 @@ class AuthController {
                 data: {
                     name: name || user.user_metadata?.name,
                     lastname: lastname || user.user_metadata?.lastname,
+                    birthdate: birthdate || user.user_metadata?.birthdate,
                 },
             });
             if (error)
@@ -134,6 +151,52 @@ class AuthController {
             res.status(500).json({ error: error.message });
         }
     }
+    async deleteAccount(req, res) {
+        console.log('🟢 [DELETE ACCOUNT] Solicitud de eliminación de cuenta recibida');
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) {
+            return res.status(401).json({ error: 'Token requerido' });
+        }
+        try {
+            const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
+            if (userError || !user) {
+                return res.status(401).json({ error: 'Token inválido o expirado' });
+            }
+            console.log('🔹 Desactivando cuenta del usuario:', user.email);
+            const deletedEmail = `deleted_${Date.now()}@deleted.moviewave`;
+            const randomPassword = Math.random().toString(36).slice(-16) + 'Aa1!';
+            const { error: updateError } = await supabase_1.supabase.auth.admin.updateUserById(user.id, {
+                email: deletedEmail,
+                password: randomPassword,
+                user_metadata: {
+                    ...user.user_metadata,
+                    account_deleted: true,
+                    deleted_at: new Date().toISOString(),
+                    original_email: user.email
+                }
+            });
+            if (updateError) {
+                console.error('❌ Error desactivando usuario:', updateError);
+                throw updateError;
+            }
+            console.log('✅ Cuenta desactivada correctamente. Email original:', user.email);
+            res.json({
+                message: 'Cuenta eliminada permanentemente',
+                original_email: user.email
+            });
+        }
+        catch (error) {
+            console.error('❌ Error en delete-account:', error.message);
+            if (error.message.includes('updateUserById')) {
+                res.status(500).json({
+                    error: 'No se pudo eliminar la cuenta en este momento. Por favor, contacta al soporte.'
+                });
+            }
+            else {
+                res.status(500).json({ error: 'Error al eliminar la cuenta' });
+            }
+        }
+    }
     async getUserProfile(req, res) {
         console.log('🟢 [GET USER PROFILE] Solicitud recibida');
         const token = req.headers.authorization?.split(' ')[1];
@@ -145,10 +208,14 @@ class AuthController {
             if (error || !user) {
                 return res.status(401).json({ error: 'Token inválido o expirado' });
             }
+            const birthdate = user.user_metadata?.birthdate;
+            const age = birthdate ? this.calculateAge(birthdate) : null;
             res.json({
                 name: user.user_metadata?.name || '',
                 lastname: user.user_metadata?.lastname || '',
                 email: user.email || '',
+                birthdate: birthdate || '',
+                age: age
             });
         }
         catch (error) {

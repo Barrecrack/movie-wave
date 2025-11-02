@@ -6,26 +6,22 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const supabase_1 = require("../config/supabase");
 const router = express_1.default.Router();
-router.get('/:userId', async (req, res) => {
-    console.log('🟢 [GET FAVORITES] Obteniendo favoritos para usuario:', req.params.userId);
+router.get('/my-favorites', async (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+        return res.status(401).json({ error: 'Token requerido' });
+    }
     try {
+        const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
+        if (userError || !user) {
+            return res.status(401).json({ error: 'Token inválido' });
+        }
+        console.log('🟢 [GET FAVORITES] Obteniendo favoritos para usuario:', user.id);
         console.log('🔹 Ejecutando consulta Supabase...');
         const { data, error } = await supabase_1.supabase
             .from('Favoritos')
-            .select(`
-        *,
-        Contenido:id_contenido (
-          id_contenido,
-          titulo,
-          poster,
-          genero,
-          año,
-          descripcion,
-          duracion,
-          video_url
-        )
-      `)
-            .eq('id_usuario', req.params.userId);
+            .select('*')
+            .eq('id_usuario', user.id);
         if (error) {
             console.error('❌ ERROR SUPABASE DETALLADO:', {
                 message: error.message,
@@ -52,17 +48,17 @@ router.get('/:userId', async (req, res) => {
 });
 router.post('/', async (req, res) => {
     console.log('🟢 [ADD FAVORITE] Agregando favorito:', req.body);
-    const { id_usuario, id_contenido } = req.body;
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+        return res.status(401).json({ error: 'Token requerido' });
+    }
     try {
-        const { data: contenido, error: contenidoError } = await supabase_1.supabase
-            .from('Contenido')
-            .select('*')
-            .eq('id_contenido', id_contenido)
-            .single();
-        if (contenidoError) {
-            console.error('❌ Contenido no encontrado:', contenidoError);
-            return res.status(404).json({ error: 'Contenido no encontrado' });
+        const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
+        if (userError || !user) {
+            return res.status(401).json({ error: 'Token inválido' });
         }
+        const { id_contenido } = req.body;
+        const id_usuario = user.id;
         const { data: existing } = await supabase_1.supabase
             .from('Favoritos')
             .select('*')
@@ -77,24 +73,12 @@ router.post('/', async (req, res) => {
             .from('Favoritos')
             .insert([
             {
-                id_usuario,
-                id_contenido,
+                id_usuario: parseInt(id_usuario),
+                id_contenido: parseInt(id_contenido),
                 fecha_agregado: new Date().toISOString()
             }
         ])
-            .select(`
-        *,
-        Contenido:id_contenido (
-          id_contenido,
-          titulo,
-          poster,
-          genero,
-          año,
-          descripcion,
-          duracion,
-          video_url
-        )
-      `);
+            .select('*');
         if (error)
             throw error;
         console.log('✅ Favorito agregado correctamente');
@@ -105,14 +89,22 @@ router.post('/', async (req, res) => {
         res.status(500).json({ error: 'Error al agregar favorito' });
     }
 });
-router.delete('/:userId/:contentId', async (req, res) => {
-    console.log('🟢 [DELETE FAVORITE] Eliminando favorito:', req.params);
+router.delete('/:contentId', async (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+        return res.status(401).json({ error: 'Token requerido' });
+    }
     try {
+        const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
+        if (userError || !user) {
+            return res.status(401).json({ error: 'Token inválido' });
+        }
+        console.log('🟢 [DELETE FAVORITE] Eliminando favorito:', req.params);
         console.log('🔹 Ejecutando DELETE en Supabase...');
         const { error } = await supabase_1.supabase
             .from('Favoritos')
             .delete()
-            .eq('id_usuario', req.params.userId)
+            .eq('id_usuario', user.id)
             .eq('id_contenido', req.params.contentId);
         if (error) {
             console.error('❌ ERROR SUPABASE DETALLADO (DELETE):', {
@@ -138,13 +130,21 @@ router.delete('/:userId/:contentId', async (req, res) => {
         });
     }
 });
-router.get('/:userId/:contentId/check', async (req, res) => {
-    console.log('🟢 [CHECK FAVORITE] Verificando favorito:', req.params);
+router.get('/check/:contentId', async (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+        return res.status(401).json({ error: 'Token requerido' });
+    }
     try {
+        const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
+        if (userError || !user) {
+            return res.status(401).json({ error: 'Token inválido' });
+        }
+        console.log('🟢 [CHECK FAVORITE] Verificando favorito:', req.params);
         const { data, error } = await supabase_1.supabase
             .from('Favoritos')
             .select('*')
-            .eq('id_usuario', req.params.userId)
+            .eq('id_usuario', user.id)
             .eq('id_contenido', req.params.contentId)
             .single();
         if (error && error.code !== 'PGRST116')

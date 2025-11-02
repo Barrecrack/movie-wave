@@ -64,6 +64,22 @@ router.put('/update-user', (req, res) => {
 });
 
 /**
+ * @route DELETE /delete-account
+ * @description Permanently deletes the authenticated user's account
+ * @access Private
+ * 
+ * @returns {Object} 200 - Success message
+ * @returns {Object} 401 - Unauthorized or invalid token
+ * @returns {Object} 500 - Server error
+ */
+router.delete('/delete-account', (req, res) => {
+  console.log('➡️ [DELETE] /delete-account');
+  AuthController.deleteAccount(req, res);
+});
+
+
+
+/**
  * @route POST /forgot-password
  * @description Sends a password reset email with recovery instructions.
  * @access Public
