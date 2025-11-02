@@ -19,6 +19,10 @@ router.put('/update-user', (req, res) => {
     console.log('➡️ [PUT] /update-user');
     AuthController_1.default.updateUser(req, res);
 });
+router.delete('/delete-account', (req, res) => {
+    console.log('➡️ [DELETE] /delete-account');
+    AuthController_1.default.deleteAccount(req, res);
+});
 router.post('/forgot-password', (req, res) => {
     console.log('➡️ [POST] /forgot-password');
     AuthController_1.default.forgotPassword(req, res);
