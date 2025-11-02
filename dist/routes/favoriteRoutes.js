@@ -191,11 +191,11 @@ router.get('/check/:contentId', async (req, res) => {
         res.status(500).json({ error: 'Error al verificar favorito' });
     }
 });
-async function getUserIdNumerico(authId) {
+async function getUserIdNumerico(token) {
     try {
-        const { data: { user }, error: authError } = await supabase_1.supabase.auth.getUser(authId);
+        const { data: { user }, error: authError } = await supabase_1.supabase.auth.getUser(token);
         if (authError || !user?.email) {
-            console.error('❌ Error obteniendo usuario de Auth:', authError);
+            console.error('❌ Error obteniendo usuario de Auth:', authError?.message);
             return null;
         }
         console.log('🔍 Buscando usuario por email:', user.email);
@@ -205,7 +205,7 @@ async function getUserIdNumerico(authId) {
             .eq('correo', user.email)
             .single();
         if (error) {
-            console.error('❌ Error buscando usuario en BD:', error);
+            console.error('❌ Error buscando usuario en BD:', error.message);
             return null;
         }
         if (!data) {
@@ -216,7 +216,7 @@ async function getUserIdNumerico(authId) {
         return data.id_usuario;
     }
     catch (error) {
-        console.error('❌ Error en getUserIdNumerico:', error);
+        console.error('❌ Error en getUserIdNumerico:', error.message);
         return null;
     }
 }

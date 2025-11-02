@@ -255,26 +255,27 @@ router.get('/check/:contentId', async (req: Request, res: Response) => {
 });
 
 // 🔥 NUEVA FUNCIÓN: Obtener ID numérico del usuario
-async function getUserIdNumerico(authId: string): Promise<number | null> {
+async function getUserIdNumerico(token: string): Promise<number | null> {
   try {
-    // Obtener el usuario de Supabase Auth para conseguir el email
-    const { data: { user }, error: authError } = await supabase.auth.getUser(authId);
+    // Usar el token directamente para obtener el usuario
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
     if (authError || !user?.email) {
-      console.error('❌ Error obteniendo usuario de Auth:', authError);
+      console.error('❌ Error obteniendo usuario de Auth:', authError?.message);
       return null;
     }
 
     console.log('🔍 Buscando usuario por email:', user.email);
     
-    // 🔥 CORRECCIÓN: Buscar en la tabla 'usuario' con columna 'id_usuario'
+    // Buscar en la tabla usuario
     const { data, error } = await supabase
-      .from('usuario')  // Tabla usuario
-      .select('id_usuario')  // ← COLUMNA CORRECTA: id_usuario
+      .from('usuario')
+      .select('id_usuario')
       .eq('correo', user.email)
       .single();
 
     if (error) {
-      console.error('❌ Error buscando usuario en BD:', error);
+      console.error('❌ Error buscando usuario en BD:', error.message);
       return null;
     }
 
@@ -285,8 +286,8 @@ async function getUserIdNumerico(authId: string): Promise<number | null> {
 
     console.log(`✅ ID numérico encontrado: ${data.id_usuario}`);
     return data.id_usuario;
-  } catch (error) {
-    console.error('❌ Error en getUserIdNumerico:', error);
+  } catch (error: any) {
+    console.error('❌ Error en getUserIdNumerico:', error.message);
     return null;
   }
 }
