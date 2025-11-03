@@ -27,38 +27,38 @@ class AuthController {
         };
     }
     async waitForUsuarioCreation(userId, maxAttempts = 10) {
+        console.log(`🕒 [waitForUsuarioCreation] Esperando creación de usuario con ID ${userId}...`);
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-            console.log(`🔄 Intento ${attempt}/${maxAttempts} - Buscando usuario en tabla Usuario...`);
+            console.log(`🔄 Intento ${attempt}/${maxAttempts}: verificando existencia en tabla Usuario...`);
             const { data: user, error } = await supabase_1.supabase
                 .from('Usuario')
                 .select('*')
                 .eq('id_usuario', userId)
                 .single();
             if (user) {
-                console.log('✅ Usuario encontrado en tabla Usuario (creado por trigger)');
+                console.log('✅ Usuario encontrado en tabla Usuario (trigger completado)');
                 return user;
             }
             if (error && error.code !== 'PGRST116') {
-                console.error('❌ Error buscando usuario:', error.message);
+                console.error(`❌ Error al consultar Usuario (intento ${attempt}):`, error.message);
             }
             await new Promise(resolve => setTimeout(resolve, 500));
         }
-        console.error(`❌ Usuario no apareció en tabla Usuario después de ${maxAttempts} intentos`);
+        console.error(`🚨 Usuario con ID ${userId} no apareció después de ${maxAttempts} intentos`);
         return null;
     }
     async register(req, res) {
-        console.log('🟢 [REGISTER] Solicitud recibida:', req.body);
+        console.log('🟢 [REGISTER] Solicitud recibida con datos:', req.body);
         const { name, lastname, email, password, birthdate } = req.body;
         try {
             if (!email || !password || !name || !lastname) {
-                return res.status(400).json({
-                    error: 'Email, password, name y lastname son requeridos'
-                });
+                console.warn('⚠️ [REGISTER] Datos incompletos recibidos');
+                return res.status(400).json({ error: 'Email, password, name y lastname son requeridos' });
             }
-            console.log('🔹 Registrando usuario en Supabase Auth...');
+            console.log('🔹 [REGISTER] Creando usuario en Supabase Auth...');
             const { data: authData, error: authError } = await supabase_1.supabase.auth.signUp({
-                email: email,
-                password: password,
+                email,
+                password,
                 options: {
                     data: {
                         nombre: name,
@@ -68,18 +68,20 @@ class AuthController {
                 },
             });
             if (authError) {
-                console.error('❌ Error en Auth:', authError.message);
+                console.error('❌ [REGISTER] Error en Supabase Auth:', authError.message);
                 return res.status(400).json({ error: authError.message });
             }
             if (!authData.user) {
+                console.error('❌ [REGISTER] No se recibió objeto user de Supabase');
                 return res.status(400).json({ error: 'No se pudo crear usuario en Auth' });
             }
-            console.log('✅ Usuario registrado en Auth:', authData.user.email);
+            console.log(`✅ [REGISTER] Usuario ${authData.user.email} registrado en Auth`);
             const usuarioData = await this.waitForUsuarioCreation(authData.user.id);
             if (!usuarioData) {
-                console.error('❌ No se pudo obtener usuario de tabla Usuario');
+                console.error('❌ [REGISTER] Usuario no encontrado en tabla Usuario');
                 return res.status(500).json({ error: 'Error al completar el registro' });
             }
+            console.log('✅ [REGISTER] Registro completado correctamente');
             res.status(201).json({
                 message: 'Usuario registrado exitosamente',
                 user: {
@@ -94,7 +96,7 @@ class AuthController {
             });
         }
         catch (error) {
-            console.error('❌ Error en registro:', error.message);
+            console.error('💥 [REGISTER] Error inesperado:', error.message);
             res.status(500).json({ error: 'Error interno del servidor' });
         }
     }
@@ -103,27 +105,26 @@ class AuthController {
         const { email, password } = req.body;
         try {
             if (!email || !password) {
+                console.warn('⚠️ [LOGIN] Falta email o password');
                 return res.status(400).json({ error: 'Email y password son requeridos' });
             }
-            console.log('🔹 Autenticando usuario...');
-            const { data, error } = await supabase_1.supabase.auth.signInWithPassword({
-                email,
-                password,
-            });
+            console.log('🔹 [LOGIN] Autenticando usuario...');
+            const { data, error } = await supabase_1.supabase.auth.signInWithPassword({ email, password });
             if (error || !data.user) {
-                console.error('❌ Error de autenticación:', error?.message);
+                console.error('❌ [LOGIN] Error de autenticación:', error?.message);
                 return res.status(401).json({ error: 'Credenciales inválidas' });
             }
+            console.log(`🔹 [LOGIN] Consultando datos en tabla Usuario para ID: ${data.user.id}`);
             const { data: usuarioData, error: usuarioError } = await supabase_1.supabase
                 .from('Usuario')
                 .select('*')
                 .eq('id_usuario', data.user.id)
                 .single();
             if (usuarioError || !usuarioData) {
-                console.error('⚠️ Usuario no encontrado en tabla Usuario:', usuarioError?.message);
+                console.warn('⚠️ [LOGIN] Usuario no encontrado en tabla Usuario:', usuarioError?.message);
                 return res.status(404).json({ error: 'Usuario no encontrado en base de datos' });
             }
-            console.log('✅ Login exitoso para:', data.user.email);
+            console.log(`✅ [LOGIN] Usuario ${data.user.email} autenticado exitosamente`);
             res.json({
                 message: 'Login exitoso',
                 user: {
@@ -139,7 +140,7 @@ class AuthController {
             });
         }
         catch (error) {
-            console.error('❌ Error en login:', error.message);
+            console.error('💥 [LOGIN] Error inesperado:', error.message);
             res.status(500).json({ error: 'Error interno del servidor' });
         }
     }
@@ -147,51 +148,58 @@ class AuthController {
         console.log('🟢 [GET USER PROFILE] Solicitud recibida');
         const token = req.headers.authorization?.split(' ')[1];
         if (!token) {
+            console.warn('⚠️ [GET USER PROFILE] Token ausente');
             return res.status(401).json({ error: 'Token requerido' });
         }
         try {
+            console.log('🔹 [GET USER PROFILE] Validando token...');
             const { data: { user }, error } = await supabase_1.supabase.auth.getUser(token);
             if (error || !user) {
+                console.error('❌ [GET USER PROFILE] Token inválido o expirado:', error?.message);
                 return res.status(401).json({ error: 'Token inválido o expirado' });
             }
+            console.log(`🔹 [GET USER PROFILE] Buscando perfil de ID: ${user.id}`);
             const { data: usuarioData, error: usuarioError } = await supabase_1.supabase
                 .from('Usuario')
                 .select('*')
                 .eq('id_usuario', user.id)
                 .single();
             if (usuarioError || !usuarioData) {
-                console.error('❌ Error obteniendo perfil:', usuarioError?.message);
+                console.error('❌ [GET USER PROFILE] Error obteniendo perfil:', usuarioError?.message);
                 return res.status(500).json({ error: 'No se encontró perfil en tabla Usuario' });
             }
+            console.log(`✅ [GET USER PROFILE] Perfil obtenido correctamente para ${usuarioData.correo}`);
             const birthdate = usuarioData.edad || '';
             const age = birthdate ? this.calculateAge(birthdate) : null;
             res.json({
                 id: usuarioData.id_usuario,
-                name: usuarioData.nombre || '',
-                lastname: usuarioData.apellido || '',
-                email: usuarioData.correo || '',
-                birthdate: birthdate,
-                age: age,
+                name: usuarioData.nombre,
+                lastname: usuarioData.apellido,
+                email: usuarioData.correo,
+                birthdate,
+                age,
             });
         }
         catch (error) {
-            console.error('❌ Error obteniendo perfil:', error.message);
+            console.error('💥 [GET USER PROFILE] Error inesperado:', error.message);
             res.status(500).json({ error: 'Error al obtener perfil del usuario' });
         }
     }
     async updateUser(req, res) {
-        console.log('🟢 [UPDATE USER] Solicitud recibida.');
+        console.log('🟢 [UPDATE USER] Solicitud recibida');
         const token = req.headers.authorization?.split(' ')[1];
         if (!token) {
+            console.warn('⚠️ [UPDATE USER] Token ausente');
             return res.status(401).json({ error: 'Token requerido' });
         }
         try {
             const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
             if (userError || !user) {
+                console.error('❌ [UPDATE USER] Token inválido o expirado:', userError?.message);
                 return res.status(401).json({ error: 'Token inválido o expirado' });
             }
             const { name, lastname, email, birthdate } = req.body;
-            console.log('🔹 Actualizando usuario:', user.email);
+            console.log(`🔹 [UPDATE USER] Actualizando datos para: ${user.email}`);
             const authUpdates = {};
             if (email)
                 authUpdates.email = email;
@@ -203,6 +211,7 @@ class AuthController {
                 };
             }
             if (Object.keys(authUpdates).length > 0) {
+                console.log('🔹 [UPDATE USER] Actualizando datos en Auth...');
                 const { error: authError } = await supabase_1.supabase.auth.updateUser(authUpdates);
                 if (authError)
                     throw authError;
@@ -216,6 +225,7 @@ class AuthController {
                 userUpdates.correo = email;
             if (birthdate !== undefined)
                 userUpdates.edad = new Date(birthdate).toISOString().split('T')[0];
+            console.log('🔹 [UPDATE USER] Actualizando tabla Usuario...');
             const { data: userData, error: userUpdateError } = await supabase_1.supabase
                 .from('Usuario')
                 .update(userUpdates)
@@ -224,7 +234,7 @@ class AuthController {
                 .single();
             if (userUpdateError)
                 throw userUpdateError;
-            console.log('✅ Usuario actualizado correctamente.');
+            console.log('✅ [UPDATE USER] Usuario actualizado exitosamente');
             res.json({
                 message: 'Usuario actualizado exitosamente',
                 user: {
@@ -237,78 +247,76 @@ class AuthController {
             });
         }
         catch (error) {
-            console.error('❌ Error en update-user:', error.message);
+            console.error('💥 [UPDATE USER] Error inesperado:', error.message);
             res.status(500).json({ error: 'Error al actualizar usuario' });
         }
     }
     async forgotPassword(req, res) {
-        console.log('🟢 [FORGOT PASSWORD] Solicitud recibida para:', req.body);
+        console.log('🟢 [FORGOT PASSWORD] Solicitud recibida:', req.body);
         const normalizedData = this.normalizeUserData(req.body);
         const { email } = normalizedData;
         if (!email) {
+            console.warn('⚠️ [FORGOT PASSWORD] Falta el campo email');
             return res.status(400).json({ error: 'Correo/email es requerido' });
         }
         try {
-            console.log('🔹 Generando token de recuperación...');
-            const resetToken = jsonwebtoken_1.default.sign({ email }, process.env.JWT_SECRET || 'secret', {
-                expiresIn: '1h',
-            });
-            console.log('🔹 Enviando correo de recuperación...');
+            console.log('🔹 [FORGOT PASSWORD] Generando token de recuperación...');
+            const resetToken = jsonwebtoken_1.default.sign({ email }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
+            console.log('🔹 [FORGOT PASSWORD] Enviando correo de recuperación...');
             if (emailService_1.sendRecoveryEmail) {
                 await (0, emailService_1.sendRecoveryEmail)(email, resetToken);
             }
             else {
-                console.warn('⚠️ Servicio de email no disponible');
-                console.log(`🔗 Token de recuperación: ${resetToken}`);
+                console.warn('⚠️ [FORGOT PASSWORD] Servicio de email no disponible');
+                console.log(`🔗 Token generado: ${resetToken}`);
             }
-            console.log('✅ Correo de recuperación enviado correctamente.');
+            console.log(`✅ [FORGOT PASSWORD] Correo enviado a ${email}`);
             res.json({
                 message: 'Correo de recuperación enviado',
                 ...(process.env.NODE_ENV === 'development' && { token: resetToken })
             });
         }
         catch (error) {
-            console.error('❌ Error en forgot-password:', error.message);
+            console.error('💥 [FORGOT PASSWORD] Error inesperado:', error.message);
             res.status(500).json({ error: 'Error interno del servidor' });
         }
     }
     async resetPassword(req, res) {
-        console.log('🟢 [RESET PASSWORD] Solicitud de reseteo recibida.');
+        console.log('🟢 [RESET PASSWORD] Solicitud recibida');
         const { token, newPassword } = req.body;
         if (!token || !newPassword) {
+            console.warn('⚠️ [RESET PASSWORD] Token o contraseña faltante');
             return res.status(400).json({ error: 'Token y nueva contraseña son requeridos' });
         }
         try {
-            console.log('🔹 Verificando token JWT...');
+            console.log('🔹 [RESET PASSWORD] Verificando token JWT...');
             const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'secret');
-            const correo = decoded.correo;
-            console.log('📧 Email decodificado del token:', correo);
+            const correo = decoded.correo || decoded.email;
+            console.log(`📧 [RESET PASSWORD] Token válido, email decodificado: ${correo}`);
             const { data: userData, error: userError } = await supabase_1.supabase
                 .from('Usuario')
                 .select('id_usuario, correo')
                 .eq('correo', correo)
                 .maybeSingle();
             if (userError && userError.code !== 'PGRST116') {
-                console.error('❌ Error buscando usuario:', userError.message);
+                console.error('❌ [RESET PASSWORD] Error buscando usuario:', userError.message);
                 return res.status(500).json({ error: 'Error interno del servidor' });
             }
             if (!userData) {
-                console.warn('⚠️ Usuario no encontrado en la base de datos.');
+                console.warn('⚠️ [RESET PASSWORD] Usuario no encontrado en base de datos');
                 return res.status(404).json({ error: 'Usuario no encontrado' });
             }
-            console.log('🔹 Actualizando contraseña del usuario con ID:', userData.id_usuario);
-            const { error: updateError } = await supabase_1.supabase.auth.updateUser({
-                password: newPassword
-            });
+            console.log(`🔹 [RESET PASSWORD] Actualizando contraseña para ID: ${userData.id_usuario}`);
+            const { error: updateError } = await supabase_1.supabase.auth.updateUser({ password: newPassword });
             if (updateError) {
-                console.error('❌ Error actualizando contraseña:', updateError.message);
+                console.error('❌ [RESET PASSWORD] Error actualizando contraseña:', updateError.message);
                 throw updateError;
             }
-            console.log('✅ Contraseña actualizada correctamente para:', correo);
+            console.log(`✅ [RESET PASSWORD] Contraseña actualizada correctamente para ${correo}`);
             res.json({ message: 'Contraseña actualizada correctamente' });
         }
         catch (error) {
-            console.error('❌ Error en reset-password:', error.message);
+            console.error('💥 [RESET PASSWORD] Error:', error.message);
             if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
                 return res.status(400).json({ error: 'Token inválido o expirado' });
             }
@@ -316,41 +324,41 @@ class AuthController {
         }
     }
     async deleteAccount(req, res) {
-        console.log('🟢 [DELETE ACCOUNT] Solicitud de eliminación de cuenta recibida');
+        console.log('🟢 [DELETE ACCOUNT] Solicitud recibida');
         const token = req.headers.authorization?.split(' ')[1];
         if (!token) {
+            console.warn('⚠️ [DELETE ACCOUNT] Token ausente');
             return res.status(401).json({ error: 'Token requerido' });
         }
         try {
             const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
             if (userError || !user) {
+                console.error('❌ [DELETE ACCOUNT] Token inválido:', userError?.message);
                 return res.status(401).json({ error: 'Token inválido o expirado' });
             }
-            console.log('🔹 Eliminando usuario de tabla Usuario:', user.email);
+            console.log(`🔹 [DELETE ACCOUNT] Eliminando cuenta de usuario: ${user.email}`);
             const { error: deleteError } = await supabase_1.supabase
                 .from('Usuario')
                 .delete()
                 .eq('id_usuario', user.id);
             if (deleteError) {
-                console.error('❌ Error eliminando usuario de tabla Usuario:', deleteError.message);
+                console.error('❌ [DELETE ACCOUNT] Error al eliminar de tabla Usuario:', deleteError.message);
                 return res.status(500).json({ error: 'Error eliminando cuenta' });
             }
-            console.log('🔹 Desactivando cuenta en Auth...');
+            console.log('🔹 [DELETE ACCOUNT] Desactivando cuenta en Auth...');
             const deletedEmail = `deleted_${Date.now()}@deleted.account`;
-            const { error: authUpdateError } = await supabase_1.supabase.auth.updateUser({
-                email: deletedEmail
-            });
+            const { error: authUpdateError } = await supabase_1.supabase.auth.updateUser({ email: deletedEmail });
             if (authUpdateError) {
-                console.warn('⚠️ No se pudo desactivar cuenta en Auth:', authUpdateError.message);
+                console.warn('⚠️ [DELETE ACCOUNT] No se pudo desactivar en Auth:', authUpdateError.message);
             }
-            console.log('✅ Cuenta eliminada/desactivada:', user.email);
+            console.log(`✅ [DELETE ACCOUNT] Cuenta ${user.email} eliminada/desactivada correctamente`);
             res.json({
                 message: 'Cuenta eliminada exitosamente',
                 original_email: user.email
             });
         }
         catch (error) {
-            console.error('❌ Error en delete-account:', error.message);
+            console.error('💥 [DELETE ACCOUNT] Error inesperado:', error.message);
             res.status(500).json({ error: 'Error interno del servidor' });
         }
     }
