@@ -19,11 +19,11 @@ class AuthController {
     }
     normalizeUserData(body) {
         return {
-            nombre: body.nombre || body.name,
-            apellido: body.apellido || body.lastname,
-            correo: body.correo || body.email,
-            contrasena: body.contrasena || body.password,
-            edad: body.edad || body.birthdate,
+            name: body.name,
+            lastname: body.lastname,
+            email: body.email,
+            password: body.password,
+            birthdate: body.birthdate,
         };
     }
     async waitForUsuarioCreation(userId, maxAttempts = 10) {
@@ -48,23 +48,22 @@ class AuthController {
     }
     async register(req, res) {
         console.log('🟢 [REGISTER] Solicitud recibida:', req.body);
-        const normalizedData = this.normalizeUserData(req.body);
-        const { nombre, apellido, correo, contrasena, edad } = normalizedData;
+        const { name, lastname, email, password, birthdate } = req.body;
         try {
-            if (!correo || !contrasena || !nombre || !apellido) {
+            if (!email || !password || !name || !lastname) {
                 return res.status(400).json({
-                    error: 'Correo, contraseña, nombre y apellido son requeridos'
+                    error: 'Email, password, name y lastname son requeridos'
                 });
             }
             console.log('🔹 Registrando usuario en Supabase Auth...');
             const { data: authData, error: authError } = await supabase_1.supabase.auth.signUp({
-                email: correo,
-                password: contrasena,
+                email: email,
+                password: password,
                 options: {
                     data: {
-                        nombre,
-                        apellido,
-                        edad
+                        nombre: name,
+                        apellido: lastname,
+                        edad: birthdate
                     }
                 },
             });
@@ -76,7 +75,6 @@ class AuthController {
                 return res.status(400).json({ error: 'No se pudo crear usuario en Auth' });
             }
             console.log('✅ Usuario registrado en Auth:', authData.user.email);
-            console.log('🔹 Esperando creación automática en tabla Usuario...');
             const usuarioData = await this.waitForUsuarioCreation(authData.user.id);
             if (!usuarioData) {
                 console.error('❌ No se pudo obtener usuario de tabla Usuario');
@@ -86,10 +84,10 @@ class AuthController {
                 message: 'Usuario registrado exitosamente',
                 user: {
                     id: usuarioData.id_usuario,
-                    nombre: usuarioData.nombre,
-                    apellido: usuarioData.apellido,
-                    correo: usuarioData.correo,
-                    edad: usuarioData.edad
+                    name: usuarioData.nombre,
+                    lastname: usuarioData.apellido,
+                    email: usuarioData.correo,
+                    birthdate: usuarioData.edad
                 },
                 session: authData.session,
                 token: authData.session?.access_token
@@ -102,16 +100,15 @@ class AuthController {
     }
     async login(req, res) {
         console.log('🟢 [LOGIN] Intento de inicio de sesión:', req.body);
-        const normalizedData = this.normalizeUserData(req.body);
-        const { correo, contrasena } = normalizedData;
+        const { email, password } = req.body;
         try {
-            if (!correo || !contrasena) {
-                return res.status(400).json({ error: 'Correo y contraseña son requeridos' });
+            if (!email || !password) {
+                return res.status(400).json({ error: 'Email y password son requeridos' });
             }
             console.log('🔹 Autenticando usuario...');
             const { data, error } = await supabase_1.supabase.auth.signInWithPassword({
-                email: correo,
-                password: contrasena
+                email: email,
+                password: password
             });
             if (error) {
                 console.error('❌ Error de autenticación:', error.message);
@@ -131,10 +128,10 @@ class AuthController {
                 message: 'Login exitoso',
                 user: {
                     id: usuarioData.id_usuario,
-                    nombre: usuarioData.nombre,
-                    apellido: usuarioData.apellido,
-                    correo: usuarioData.correo,
-                    edad: usuarioData.edad
+                    name: usuarioData.nombre,
+                    lastname: usuarioData.apellido,
+                    email: usuarioData.correo,
+                    birthdate: usuarioData.edad
                 },
                 session: data.session,
                 token: data.session?.access_token,
@@ -166,14 +163,14 @@ class AuthController {
                 console.error('❌ Error obteniendo perfil:', usuarioError.message);
                 return res.status(500).json({ error: 'Error al obtener perfil' });
             }
-            const edad = usuarioData?.edad;
-            const age = edad ? this.calculateAge(edad) : null;
+            const birthdate = usuarioData?.edad;
+            const age = birthdate ? this.calculateAge(birthdate) : null;
             res.json({
                 id: usuarioData.id_usuario,
-                nombre: usuarioData.nombre || '',
-                apellido: usuarioData.apellido || '',
-                correo: usuarioData.correo || '',
-                edad: edad || '',
+                name: usuarioData.nombre || '',
+                lastname: usuarioData.apellido || '',
+                email: usuarioData.correo || '',
+                birthdate: birthdate || '',
                 age: age
             });
         }
@@ -193,30 +190,29 @@ class AuthController {
             if (userError || !user) {
                 return res.status(401).json({ error: 'Token inválido o expirado' });
             }
-            const normalizedData = this.normalizeUserData(req.body);
-            const { nombre, apellido, correo, edad } = normalizedData;
+            const { name, lastname, email, birthdate } = req.body;
             console.log('🔹 Actualizando datos del usuario:', user.email);
             const authUpdates = {};
-            if (nombre !== undefined)
-                authUpdates.data = { ...authUpdates.data, nombre };
-            if (apellido !== undefined)
-                authUpdates.data = { ...authUpdates.data, apellido };
-            if (correo !== undefined)
-                authUpdates.email = correo;
+            if (name !== undefined)
+                authUpdates.data = { ...authUpdates.data, nombre: name };
+            if (lastname !== undefined)
+                authUpdates.data = { ...authUpdates.data, apellido: lastname };
+            if (email !== undefined)
+                authUpdates.email = email;
             if (Object.keys(authUpdates).length > 0) {
                 const { error: authError } = await supabase_1.supabase.auth.updateUser(authUpdates);
                 if (authError)
                     throw authError;
             }
             const userUpdates = {};
-            if (nombre !== undefined)
-                userUpdates.nombre = nombre;
-            if (apellido !== undefined)
-                userUpdates.apellido = apellido;
-            if (correo !== undefined)
-                userUpdates.correo = correo;
-            if (edad !== undefined)
-                userUpdates.edad = new Date(edad).toISOString().split('T')[0];
+            if (name !== undefined)
+                userUpdates.nombre = name;
+            if (lastname !== undefined)
+                userUpdates.apellido = lastname;
+            if (email !== undefined)
+                userUpdates.correo = email;
+            if (birthdate !== undefined)
+                userUpdates.edad = new Date(birthdate).toISOString().split('T')[0];
             if (Object.keys(userUpdates).length > 0) {
                 const { data: userData, error: userUpdateError } = await supabase_1.supabase
                     .from('Usuario')
@@ -229,7 +225,13 @@ class AuthController {
                 console.log('✅ Usuario actualizado correctamente:', user.email);
                 res.json({
                     message: 'Usuario actualizado exitosamente',
-                    user: userData
+                    user: {
+                        id: userData.id_usuario,
+                        name: userData.nombre,
+                        lastname: userData.apellido,
+                        email: userData.correo,
+                        birthdate: userData.edad
+                    }
                 });
             }
             else {
@@ -244,18 +246,18 @@ class AuthController {
     async forgotPassword(req, res) {
         console.log('🟢 [FORGOT PASSWORD] Solicitud recibida para:', req.body);
         const normalizedData = this.normalizeUserData(req.body);
-        const { correo } = normalizedData;
-        if (!correo) {
+        const { email } = normalizedData;
+        if (!email) {
             return res.status(400).json({ error: 'Correo/email es requerido' });
         }
         try {
             console.log('🔹 Generando token de recuperación...');
-            const resetToken = jsonwebtoken_1.default.sign({ correo }, process.env.JWT_SECRET || 'secret', {
+            const resetToken = jsonwebtoken_1.default.sign({ email }, process.env.JWT_SECRET || 'secret', {
                 expiresIn: '1h',
             });
             console.log('🔹 Enviando correo de recuperación...');
             if (emailService_1.sendRecoveryEmail) {
-                await (0, emailService_1.sendRecoveryEmail)(correo, resetToken);
+                await (0, emailService_1.sendRecoveryEmail)(email, resetToken);
             }
             else {
                 console.warn('⚠️ Servicio de email no disponible');
