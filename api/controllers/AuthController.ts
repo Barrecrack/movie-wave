@@ -22,12 +22,13 @@ class AuthController {
   }
 
   private normalizeUserData(body: any) {
+    // El frontend ahora siempre envía en inglés, así que usamos directamente
     return {
-      nombre: body.nombre || body.name,
-      apellido: body.apellido || body.lastname,
-      correo: body.correo || body.email,
-      contrasena: body.contrasena || body.password,
-      edad: body.edad || body.birthdate,
+      name: body.name,
+      lastname: body.lastname,
+      email: body.email,
+      password: body.password,
+      birthdate: body.birthdate,
     };
   }
 
@@ -67,27 +68,27 @@ class AuthController {
   async register(req: Request, res: Response) {
     console.log('🟢 [REGISTER] Solicitud recibida:', req.body);
 
-    const normalizedData = this.normalizeUserData(req.body);
-    const { nombre, apellido, correo, contrasena, edad } = normalizedData;
+    // 🔥 RECIBIR EN INGLÉS del frontend
+    const { name, lastname, email, password, birthdate } = req.body;
 
     try {
-      if (!correo || !contrasena || !nombre || !apellido) {
+      if (!email || !password || !name || !lastname) {
         return res.status(400).json({
-          error: 'Correo, contraseña, nombre y apellido son requeridos'
+          error: 'Email, password, name y lastname son requeridos'
         });
       }
 
       console.log('🔹 Registrando usuario en Supabase Auth...');
 
-      // 1. SOLO registrar en Auth - el trigger creará automáticamente en Usuario
+      // Convertir a español para Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: correo,
-        password: contrasena,
+        email: email,
+        password: password,
         options: {
           data: {
-            nombre,
-            apellido,
-            edad
+            nombre: name,      // ← convertir a español
+            apellido: lastname, // ← convertir a español
+            edad: birthdate     // ← convertir a español
           }
         },
       });
@@ -103,8 +104,7 @@ class AuthController {
 
       console.log('✅ Usuario registrado en Auth:', authData.user.email);
 
-      // 2. ESPERAR a que el trigger cree el usuario en tabla Usuario
-      console.log('🔹 Esperando creación automática en tabla Usuario...');
+      // Esperar a que el trigger cree el usuario
       const usuarioData = await this.waitForUsuarioCreation(authData.user.id);
 
       if (!usuarioData) {
@@ -112,14 +112,15 @@ class AuthController {
         return res.status(500).json({ error: 'Error al completar el registro' });
       }
 
+      // 🔥 RESPONDER EN INGLÉS
       res.status(201).json({
         message: 'Usuario registrado exitosamente',
         user: {
           id: usuarioData.id_usuario,
-          nombre: usuarioData.nombre,
-          apellido: usuarioData.apellido,
-          correo: usuarioData.correo,
-          edad: usuarioData.edad
+          name: usuarioData.nombre,        // ← inglés
+          lastname: usuarioData.apellido,  // ← inglés
+          email: usuarioData.correo,       // ← inglés
+          birthdate: usuarioData.edad      // ← inglés
         },
         session: authData.session,
         token: authData.session?.access_token
@@ -137,18 +138,18 @@ class AuthController {
   async login(req: Request, res: Response) {
     console.log('🟢 [LOGIN] Intento de inicio de sesión:', req.body);
 
-    const normalizedData = this.normalizeUserData(req.body);
-    const { correo, contrasena } = normalizedData;
+    // 🔥 RECIBIR EN INGLÉS
+    const { email, password } = req.body;
 
     try {
-      if (!correo || !contrasena) {
-        return res.status(400).json({ error: 'Correo y contraseña son requeridos' });
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email y password son requeridos' });
       }
 
       console.log('🔹 Autenticando usuario...');
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: correo,
-        password: contrasena
+        email: email,
+        password: password
       });
 
       if (error) {
@@ -170,14 +171,15 @@ class AuthController {
 
       console.log('✅ Login exitoso para:', data.user.email);
 
+      // 🔥 RESPONDER EN INGLÉS
       res.json({
         message: 'Login exitoso',
         user: {
           id: usuarioData.id_usuario,
-          nombre: usuarioData.nombre,
-          apellido: usuarioData.apellido,
-          correo: usuarioData.correo,
-          edad: usuarioData.edad
+          name: usuarioData.nombre,        // ← inglés
+          lastname: usuarioData.apellido,  // ← inglés
+          email: usuarioData.correo,       // ← inglés
+          birthdate: usuarioData.edad      // ← inglés
         },
         session: data.session,
         token: data.session?.access_token,
@@ -219,15 +221,16 @@ class AuthController {
         return res.status(500).json({ error: 'Error al obtener perfil' });
       }
 
-      const edad = usuarioData?.edad;
-      const age = edad ? this.calculateAge(edad) : null;
+      const birthdate = usuarioData?.edad; // Cambiar 'edad' por 'birthdate'
+      const age = birthdate ? this.calculateAge(birthdate) : null;
 
+      // 🔥 DEVOLVER EN INGLÉS como espera el frontend
       res.json({
         id: usuarioData.id_usuario,
-        nombre: usuarioData.nombre || '',
-        apellido: usuarioData.apellido || '',
-        correo: usuarioData.correo || '',
-        edad: edad || '',
+        name: usuarioData.nombre || '',        // ← inglés
+        lastname: usuarioData.apellido || '',  // ← inglés
+        email: usuarioData.correo || '',       // ← inglés
+        birthdate: birthdate || '',            // ← inglés
         age: age
       });
     } catch (error: any) {
@@ -254,28 +257,28 @@ class AuthController {
         return res.status(401).json({ error: 'Token inválido o expirado' });
       }
 
-      const normalizedData = this.normalizeUserData(req.body);
-      const { nombre, apellido, correo, edad } = normalizedData;
+      // 🔥 RECIBIR DATOS EN INGLÉS del frontend
+      const { name, lastname, email, birthdate } = req.body;
 
       console.log('🔹 Actualizando datos del usuario:', user.email);
 
       // Actualizar en Auth (metadatos)
       const authUpdates: any = {};
-      if (nombre !== undefined) authUpdates.data = { ...authUpdates.data, nombre };
-      if (apellido !== undefined) authUpdates.data = { ...authUpdates.data, apellido };
-      if (correo !== undefined) authUpdates.email = correo;
+      if (name !== undefined) authUpdates.data = { ...authUpdates.data, nombre: name };
+      if (lastname !== undefined) authUpdates.data = { ...authUpdates.data, apellido: lastname };
+      if (email !== undefined) authUpdates.email = email;
 
       if (Object.keys(authUpdates).length > 0) {
         const { error: authError } = await supabase.auth.updateUser(authUpdates);
         if (authError) throw authError;
       }
 
-      // Actualizar en tabla Usuario
+      // Actualizar en tabla Usuario - CONVERTIR a español para la base de datos
       const userUpdates: any = {};
-      if (nombre !== undefined) userUpdates.nombre = nombre;
-      if (apellido !== undefined) userUpdates.apellido = apellido;
-      if (correo !== undefined) userUpdates.correo = correo;
-      if (edad !== undefined) userUpdates.edad = new Date(edad).toISOString().split('T')[0];
+      if (name !== undefined) userUpdates.nombre = name;
+      if (lastname !== undefined) userUpdates.apellido = lastname;
+      if (email !== undefined) userUpdates.correo = email;
+      if (birthdate !== undefined) userUpdates.edad = new Date(birthdate).toISOString().split('T')[0];
 
       if (Object.keys(userUpdates).length > 0) {
         const { data: userData, error: userUpdateError } = await supabase
@@ -288,9 +291,17 @@ class AuthController {
         if (userUpdateError) throw userUpdateError;
 
         console.log('✅ Usuario actualizado correctamente:', user.email);
+
+        // 🔥 RESPONDER EN INGLÉS
         res.json({
           message: 'Usuario actualizado exitosamente',
-          user: userData
+          user: {
+            id: userData.id_usuario,
+            name: userData.nombre,
+            lastname: userData.apellido,
+            email: userData.correo,
+            birthdate: userData.edad
+          }
         });
       } else {
         res.status(400).json({ error: 'No se proporcionaron datos para actualizar' });
@@ -309,22 +320,22 @@ class AuthController {
     console.log('🟢 [FORGOT PASSWORD] Solicitud recibida para:', req.body);
 
     const normalizedData = this.normalizeUserData(req.body);
-    const { correo } = normalizedData;
+    const { email } = normalizedData;
 
-    if (!correo) {
+    if (!email) {
       return res.status(400).json({ error: 'Correo/email es requerido' });
     }
 
     try {
       console.log('🔹 Generando token de recuperación...');
-      const resetToken = jwt.sign({ correo }, process.env.JWT_SECRET || 'secret', {
+      const resetToken = jwt.sign({ email }, process.env.JWT_SECRET || 'secret', {
         expiresIn: '1h',
       });
 
       console.log('🔹 Enviando correo de recuperación...');
 
       if (sendRecoveryEmail) {
-        await sendRecoveryEmail(correo, resetToken);
+        await sendRecoveryEmail(email, resetToken);
       } else {
         console.warn('⚠️ Servicio de email no disponible');
         console.log(`🔗 Token de recuperación: ${resetToken}`);
