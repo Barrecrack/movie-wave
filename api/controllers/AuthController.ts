@@ -71,9 +71,9 @@ class AuthController {
     const { name, lastname, email, password, birthdate } = req.body;
 
     try {
-      if (!email || !password || !name || !lastname) {
+      if (!email || !password || !name || !lastname || !birthdate) {
         console.warn('⚠️ [REGISTER] Datos incompletos recibidos');
-        return res.status(400).json({ error: 'Email, password, name y lastname son requeridos' });
+        return res.status(400).json({ error: 'Todos los campos son requeridos' });
       }
 
       console.log('🔹 [REGISTER] Creando usuario en Supabase Auth...');
@@ -101,22 +101,37 @@ class AuthController {
       }
 
       console.log(`✅ [REGISTER] Usuario ${authData.user.email} registrado en Auth`);
-      const usuarioData = await this.waitForUsuarioCreation(authData.user.id);
 
-      if (!usuarioData) {
-        console.error('❌ [REGISTER] Usuario no encontrado en tabla Usuario');
-        return res.status(500).json({ error: 'Error al completar el registro' });
+      // 🔥 CREACIÓN MANUAL EN TABLA USUARIO (backup si falla el trigger)
+      try {
+        const { error: usuarioError } = await supabase
+          .from('Usuario')
+          .insert([{
+            id_usuario: authData.user.id,
+            nombre: name,
+            apellido: lastname,
+            correo: email,
+            edad: birthdate,
+            contrasena: password
+          }]);
+
+        if (usuarioError) {
+          console.warn('⚠️ [REGISTER] Error creando usuario manual:', usuarioError.message);
+          // No fallar aquí, puede que el trigger ya lo haya creado
+        }
+      } catch (manualError) {
+        console.warn('⚠️ [REGISTER] Error en creación manual:', manualError);
       }
 
       console.log('✅ [REGISTER] Registro completado correctamente');
       res.status(201).json({
         message: 'Usuario registrado exitosamente',
         user: {
-          id: usuarioData.id_usuario,
-          name: usuarioData.nombre,
-          lastname: usuarioData.apellido,
-          email: usuarioData.correo,
-          birthdate: usuarioData.edad
+          id: authData.user.id,
+          name: name,
+          lastname: lastname,
+          email: email,
+          birthdate: birthdate
         },
         session: authData.session,
         token: authData.session?.access_token
@@ -356,34 +371,30 @@ class AuthController {
     try {
       console.log('🔹 [RESET PASSWORD] Verificando token JWT...');
       const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-      const correo = decoded.correo || decoded.email;
-      console.log(`📧 [RESET PASSWORD] Token válido, email decodificado: ${correo}`);
+      const email = decoded.email || decoded.correo;
 
-      const { data: userData, error: userError } = await supabase
-        .from('Usuario')
-        .select('id_usuario, correo')
-        .eq('correo', correo)
-        .maybeSingle();
-
-      if (userError && userError.code !== 'PGRST116') {
-        console.error('❌ [RESET PASSWORD] Error buscando usuario:', userError.message);
-        return res.status(500).json({ error: 'Error interno del servidor' });
+      if (!email) {
+        return res.status(400).json({ error: 'Token inválido: email no encontrado' });
       }
 
-      if (!userData) {
-        console.warn('⚠️ [RESET PASSWORD] Usuario no encontrado en base de datos');
-        return res.status(404).json({ error: 'Usuario no encontrado' });
+      console.log(`📧 [RESET PASSWORD] Token válido, email: ${email}`);
+
+      // 🔥 USAR DIRECTAMENTE SUPABASE AUTH PARA RESET
+      const { error: resetError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (resetError) {
+        console.error('❌ [RESET PASSWORD] Error actualizando contraseña:', resetError.message);
+
+        if (resetError.message.includes('different from the old')) {
+          return res.status(400).json({ error: 'La nueva contraseña debe ser diferente a la anterior' });
+        }
+
+        throw resetError;
       }
 
-      console.log(`🔹 [RESET PASSWORD] Actualizando contraseña para ID: ${userData.id_usuario}`);
-      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
-
-      if (updateError) {
-        console.error('❌ [RESET PASSWORD] Error actualizando contraseña:', updateError.message);
-        throw updateError;
-      }
-
-      console.log(`✅ [RESET PASSWORD] Contraseña actualizada correctamente para ${correo}`);
+      console.log(`✅ [RESET PASSWORD] Contraseña actualizada correctamente para ${email}`);
       res.json({ message: 'Contraseña actualizada correctamente' });
 
     } catch (error: any) {
@@ -403,46 +414,47 @@ class AuthController {
     const token = req.headers.authorization?.split(' ')[1];
 
     if (!token) {
-      console.warn('⚠️ [DELETE ACCOUNT] Token ausente');
       return res.status(401).json({ error: 'Token requerido' });
     }
 
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser(token);
       if (userError || !user) {
-        console.error('❌ [DELETE ACCOUNT] Token inválido:', userError?.message);
-        return res.status(401).json({ error: 'Token inválido o expirado' });
+        return res.status(401).json({ error: 'Token inválido' });
       }
 
-      console.log(`🔹 [DELETE ACCOUNT] Eliminando cuenta de usuario: ${user.email}`);
+      console.log(`🔹 Eliminando cuenta de: ${user.email}`);
 
-      const { error: deleteError } = await supabase
-        .from('Usuario')
-        .delete()
-        .eq('id_usuario', user.id);
+      // 1. Eliminar datos relacionados
+      await supabase.from('Favoritos').delete().eq('id_usuario', user.id);
+      await supabase.from('Historial_Reproduccion').delete().eq('id_usuario', user.id);
+      await supabase.from('Calificaciones').delete().eq('id_usuario', user.id);
 
-      if (deleteError) {
-        console.error('❌ [DELETE ACCOUNT] Error al eliminar de tabla Usuario:', deleteError.message);
-        return res.status(500).json({ error: 'Error eliminando cuenta' });
-      }
+      // 2. Eliminar de tabla Usuario
+      await supabase.from('Usuario').delete().eq('id_usuario', user.id);
 
-      console.log('🔹 [DELETE ACCOUNT] Desactivando cuenta en Auth...');
-      const deletedEmail = `deleted_${Date.now()}@deleted.account`;
-      const { error: authUpdateError } = await supabase.auth.updateUser({ email: deletedEmail });
+      // 3. Desactivar en Auth (cambiar email para liberar el original)
+      const newEmail = `deleted_${Date.now()}_${user.id}@moviewave.com`;
+      await supabase.auth.admin.updateUserById(user.id, {
+        email: newEmail,
+        user_metadata: {
+          deleted: true,
+          original_email: user.email,
+          deleted_at: new Date().toISOString()
+        }
+      });
 
-      if (authUpdateError) {
-        console.warn('⚠️ [DELETE ACCOUNT] No se pudo desactivar en Auth:', authUpdateError.message);
-      }
+      console.log('✅ Cuenta eliminada exitosamente');
 
-      console.log(`✅ [DELETE ACCOUNT] Cuenta ${user.email} eliminada/desactivada correctamente`);
       res.json({
         message: 'Cuenta eliminada exitosamente',
-        original_email: user.email
+        original_email: user.email,
+        note: 'Puedes usar el mismo email para registrarte nuevamente'
       });
 
     } catch (error: any) {
-      console.error('💥 [DELETE ACCOUNT] Error inesperado:', error.message);
-      res.status(500).json({ error: 'Error interno del servidor' });
+      console.error('💥 Error eliminando cuenta:', error);
+      res.status(500).json({ error: 'Error eliminando cuenta' });
     }
   }
 }

@@ -42,7 +42,7 @@ async function getOrCreateContentId(pexelsId, movieData) {
             .select('id_contenido')
             .eq('id_externo', pexelsId.toString())
             .single();
-        if (existingContent) {
+        if (existingContent && !searchError) {
             console.log(`✅ [CONTENT] Contenido existente: ${existingContent.id_contenido}`);
             return existingContent.id_contenido;
         }
@@ -60,21 +60,30 @@ async function getOrCreateContentId(pexelsId, movieData) {
             poster: movieData?.poster || null,
             genero: movieData?.genre || 'general'
         };
+        console.log('📝 [CONTENT] Datos a insertar:', contentData);
         const { data: newContent, error: createError } = await supabase_1.supabase
             .from('Contenido')
             .insert([contentData])
             .select('id_contenido')
             .single();
         if (createError) {
-            console.error('❌ [CONTENT] Error creando contenido:', createError.message);
+            console.error('❌ [CONTENT] Error creando contenido:', createError);
+            const { data: retryContent } = await supabase_1.supabase
+                .from('Contenido')
+                .select('id_contenido')
+                .eq('id_externo', pexelsId.toString())
+                .single();
+            if (retryContent) {
+                console.log(`✅ [CONTENT] Contenido encontrado en reintento: ${retryContent.id_contenido}`);
+                return retryContent.id_contenido;
+            }
             return null;
         }
         console.log(`✅ [CONTENT] Nuevo contenido creado con ID: ${newContent.id_contenido}`);
-        console.log(`⏱️ [CONTENT] Tiempo total: ${Date.now() - startTime} ms`);
         return newContent.id_contenido;
     }
     catch (error) {
-        console.error('💥 [CONTENT] Error interno en getOrCreateContentId:', error.message);
+        console.error('💥 [CONTENT] Error interno en getOrCreateContentId:', error);
         return null;
     }
 }
