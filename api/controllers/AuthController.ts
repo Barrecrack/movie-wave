@@ -78,6 +78,7 @@ class AuthController {
 
       console.log('🔹 [REGISTER] Creando usuario en Supabase Auth...');
 
+      // 🔥 MEJORADO: Incluir TODOS los datos en Auth metadata
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -85,7 +86,8 @@ class AuthController {
           data: {
             nombre: name,
             apellido: lastname,
-            edad: birthdate
+            edad: birthdate,
+            correo: email  // 🔥 NUEVO: Incluir correo también
           }
         },
       });
@@ -100,38 +102,68 @@ class AuthController {
         return res.status(400).json({ error: 'No se pudo crear usuario en Auth' });
       }
 
-      console.log(`✅ [REGISTER] Usuario ${authData.user.email} registrado en Auth`);
+      console.log(`✅ [REGISTER] Usuario ${email} registrado en Auth`);
 
-      // 🔥 CREACIÓN MANUAL EN TABLA USUARIO (backup si falla el trigger)
-      try {
-        const { error: usuarioError } = await supabase
+      // 🔥 MEJORADO: Creación en tabla Usuario con verificación
+      console.log('🔹 [REGISTER] Creando usuario en tabla Usuario...');
+      const { data: usuarioData, error: usuarioError } = await supabase
+        .from('Usuario')
+        .insert([{
+          id_usuario: authData.user.id,
+          nombre: name,
+          apellido: lastname,
+          correo: email,
+          edad: birthdate,
+          contrasena: password
+        }])
+        .select()
+        .single();
+
+      if (usuarioError) {
+        console.error('❌ [REGISTER] Error creando en tabla Usuario:', usuarioError.message);
+
+        // 🔥 NUEVO ESTRATEGIA: No podemos eliminar de Auth, pero verificamos si ya existe
+        console.log('🔄 [REGISTER] Verificando si el usuario ya existe en tabla Usuario...');
+        const { data: existingUser } = await supabase
           .from('Usuario')
-          .insert([{
-            id_usuario: authData.user.id,
-            nombre: name,
-            apellido: lastname,
-            correo: email,
-            edad: birthdate,
-            contrasena: password
-          }]);
+          .select('*')
+          .eq('id_usuario', authData.user.id)
+          .single();
 
-        if (usuarioError) {
-          console.warn('⚠️ [REGISTER] Error creando usuario manual:', usuarioError.message);
-          // No fallar aquí, puede que el trigger ya lo haya creado
+        if (existingUser) {
+          console.log('✅ [REGISTER] Usuario ya existe en tabla Usuario (trigger funcionó)');
+          // Usamos el usuario existente
+          return res.status(201).json({
+            message: 'Usuario registrado exitosamente',
+            user: {
+              id: existingUser.id_usuario,
+              name: existingUser.nombre,
+              lastname: existingUser.apellido,
+              email: existingUser.correo,
+              birthdate: existingUser.edad
+            },
+            session: authData.session,
+            token: authData.session?.access_token
+          });
+        } else {
+          // Si no existe y falló la inserción, informamos el error
+          return res.status(400).json({
+            error: 'Error al crear perfil de usuario. Intente nuevamente.'
+          });
         }
-      } catch (manualError) {
-        console.warn('⚠️ [REGISTER] Error en creación manual:', manualError);
       }
 
-      console.log('✅ [REGISTER] Registro completado correctamente');
+      console.log('✅ [REGISTER] Usuario creado en tabla Usuario correctamente');
+
+      // 🔥 MEJORADO: Devolver datos desde tabla Usuario
       res.status(201).json({
         message: 'Usuario registrado exitosamente',
         user: {
-          id: authData.user.id,
-          name: name,
-          lastname: lastname,
-          email: email,
-          birthdate: birthdate
+          id: usuarioData.id_usuario,
+          name: usuarioData.nombre,
+          lastname: usuarioData.apellido,
+          email: usuarioData.correo,
+          birthdate: usuarioData.edad
         },
         session: authData.session,
         token: authData.session?.access_token
@@ -177,7 +209,17 @@ class AuthController {
         return res.status(404).json({ error: 'Usuario no encontrado en base de datos' });
       }
 
-      console.log(`✅ [LOGIN] Usuario ${data.user.email} autenticado exitosamente`);
+      // 🔥 NUEVO: Verificar sincronización entre Auth y Usuario
+      console.log('🔍 [LOGIN] Verificando sincronización Auth-Usuario...');
+      const authMetadata = data.user.user_metadata;
+      console.log('   Auth metadata:', authMetadata);
+      console.log('   Usuario data:', {
+        nombre: usuarioData.nombre,
+        apellido: usuarioData.apellido,
+        edad: usuarioData.edad
+      });
+
+      console.log(`✅ [LOGIN] Usuario ${usuarioData.correo} autenticado exitosamente`);
       res.json({
         message: 'Login exitoso',
         user: {
@@ -186,6 +228,7 @@ class AuthController {
           lastname: usuarioData.apellido,
           email: usuarioData.correo,
           birthdate: usuarioData.edad,
+          age: this.calculateAge(usuarioData.edad)  // 🔥 NUEVO: Incluir edad calculada
         },
         session: data.session,
         token: data.session?.access_token,
@@ -269,13 +312,15 @@ class AuthController {
       const { name, lastname, email, birthdate } = req.body;
       console.log(`🔹 [UPDATE USER] Actualizando datos para: ${user.email}`);
 
+      // 🔥 MEJORADO: Incluir birthdate en Auth metadata también
       const authUpdates: any = {};
       if (email) authUpdates.email = email;
-      if (name || lastname) {
+      if (name || lastname || birthdate) {
         authUpdates.data = {
           ...(user.user_metadata || {}),
           ...(name && { nombre: name }),
           ...(lastname && { apellido: lastname }),
+          ...(birthdate && { edad: birthdate }),  // 🔥 NUEVO: Sincronizar birthdate
         };
       }
 
@@ -302,7 +347,7 @@ class AuthController {
 
       if (userUpdateError) throw userUpdateError;
 
-      console.log('✅ [UPDATE USER] Usuario actualizado exitosamente');
+      console.log('✅ [UPDATE USER] Usuario actualizado exitosamente en ambas tablas');
       res.json({
         message: 'Usuario actualizado exitosamente',
         user: {
