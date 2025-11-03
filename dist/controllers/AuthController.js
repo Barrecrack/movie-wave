@@ -26,32 +26,34 @@ class AuthController {
             edad: body.edad || body.birthdate,
         };
     }
-    async checkUserExists(correo) {
-        try {
-            const { data, error } = await supabase_1.supabase
+    async waitForUsuarioCreation(userId, maxAttempts = 10) {
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            console.log(`🔄 Intento ${attempt}/${maxAttempts} - Buscando usuario en tabla Usuario...`);
+            const { data: user, error } = await supabase_1.supabase
                 .from('Usuario')
-                .select('id_usuario')
-                .eq('correo', correo)
-                .maybeSingle();
-            if (error) {
-                console.error('❌ Error verificando usuario existente:', error.message);
-                return false;
+                .select('*')
+                .eq('id_usuario', userId)
+                .single();
+            if (user) {
+                console.log('✅ Usuario encontrado en tabla Usuario (creado por trigger)');
+                return user;
             }
-            return !!data;
+            if (error && error.code !== 'PGRST116') {
+                console.error('❌ Error buscando usuario:', error.message);
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
-        catch (error) {
-            console.error('❌ Error en checkUserExists:', error);
-            return false;
-        }
+        console.error(`❌ Usuario no apareció en tabla Usuario después de ${maxAttempts} intentos`);
+        return null;
     }
     async register(req, res) {
-        console.log('🟢 [REGISTER] Solicitud recibida con body:', req.body);
+        console.log('🟢 [REGISTER] Solicitud recibida:', req.body);
         const normalizedData = this.normalizeUserData(req.body);
         const { nombre, apellido, correo, contrasena, edad } = normalizedData;
         try {
             if (!correo || !contrasena || !nombre || !apellido) {
                 return res.status(400).json({
-                    error: 'Correo/email, contraseña/password, nombre/name y apellido/lastname son requeridos'
+                    error: 'Correo, contraseña, nombre y apellido son requeridos'
                 });
             }
             console.log('🔹 Registrando usuario en Supabase Auth...');
@@ -67,61 +69,27 @@ class AuthController {
                 },
             });
             if (authError) {
-                console.error('❌ Error en Supabase Auth:', authError.message);
+                console.error('❌ Error en Auth:', authError.message);
                 return res.status(400).json({ error: authError.message });
             }
             if (!authData.user) {
-                return res.status(400).json({ error: 'No se pudo crear el usuario en Auth' });
+                return res.status(400).json({ error: 'No se pudo crear usuario en Auth' });
             }
             console.log('✅ Usuario registrado en Auth:', authData.user.email);
-            let userData;
-            console.log('🔹 Creando usuario en tabla Usuario...');
-            const { data: newUserData, error: userError } = await supabase_1.supabase
-                .from('Usuario')
-                .insert([
-                {
-                    id_usuario: authData.user.id,
-                    nombre,
-                    apellido,
-                    correo,
-                    contrasena: contrasena,
-                    edad: edad ? new Date(edad).toISOString().split('T')[0] : null
-                }
-            ])
-                .select()
-                .single();
-            if (userError) {
-                console.error('❌ Error creando usuario en tabla Usuario:', userError.message);
-                if (userError.code === '23505') {
-                    console.log('🔄 Usuario ya existe en tabla, obteniendo datos...');
-                    const { data: existingUser, error: fetchError } = await supabase_1.supabase
-                        .from('Usuario')
-                        .select('*')
-                        .eq('id_usuario', authData.user.id)
-                        .single();
-                    if (fetchError) {
-                        console.error('❌ Error obteniendo usuario existente:', fetchError.message);
-                        throw fetchError;
-                    }
-                    console.log('✅ Usuario existente obtenido:', existingUser.id_usuario);
-                    userData = existingUser;
-                }
-                else {
-                    throw userError;
-                }
-            }
-            else {
-                console.log('✅ Usuario creado en tabla Usuario:', newUserData.id_usuario);
-                userData = newUserData;
+            console.log('🔹 Esperando creación automática en tabla Usuario...');
+            const usuarioData = await this.waitForUsuarioCreation(authData.user.id);
+            if (!usuarioData) {
+                console.error('❌ No se pudo obtener usuario de tabla Usuario');
+                return res.status(500).json({ error: 'Error al completar el registro' });
             }
             res.status(201).json({
                 message: 'Usuario registrado exitosamente',
                 user: {
-                    id: userData.id_usuario,
-                    nombre: userData.nombre,
-                    apellido: userData.apellido,
-                    correo: userData.correo,
-                    edad: userData.edad
+                    id: usuarioData.id_usuario,
+                    nombre: usuarioData.nombre,
+                    apellido: usuarioData.apellido,
+                    correo: usuarioData.correo,
+                    edad: usuarioData.edad
                 },
                 session: authData.session,
                 token: authData.session?.access_token
@@ -133,12 +101,12 @@ class AuthController {
         }
     }
     async login(req, res) {
-        console.log('🟢 [LOGIN] Intento de inicio de sesión con body:', req.body);
+        console.log('🟢 [LOGIN] Intento de inicio de sesión:', req.body);
         const normalizedData = this.normalizeUserData(req.body);
         const { correo, contrasena } = normalizedData;
         try {
             if (!correo || !contrasena) {
-                return res.status(400).json({ error: 'Correo/email y contraseña/password son requeridos' });
+                return res.status(400).json({ error: 'Correo y contraseña son requeridos' });
             }
             console.log('🔹 Autenticando usuario...');
             const { data, error } = await supabase_1.supabase.auth.signInWithPassword({
@@ -149,30 +117,24 @@ class AuthController {
                 console.error('❌ Error de autenticación:', error.message);
                 return res.status(401).json({ error: 'Credenciales inválidas' });
             }
-            const { data: userData, error: userError } = await supabase_1.supabase
+            const { data: usuarioData, error: usuarioError } = await supabase_1.supabase
                 .from('Usuario')
                 .select('*')
                 .eq('id_usuario', data.user.id)
-                .maybeSingle();
-            if (userError && userError.code !== 'PGRST116') {
-                console.error('❌ Error obteniendo datos del usuario:', userError.message);
+                .single();
+            if (usuarioError) {
+                console.error('❌ Error obteniendo datos de usuario:', usuarioError.message);
+                return res.status(500).json({ error: 'Error al obtener datos del usuario' });
             }
             console.log('✅ Login exitoso para:', data.user.email);
-            const userProfile = userData || {
-                id_usuario: data.user.id,
-                nombre: data.user.user_metadata?.nombre || '',
-                apellido: data.user.user_metadata?.apellido || '',
-                correo: data.user.email || '',
-                edad: data.user.user_metadata?.edad || null
-            };
             res.json({
                 message: 'Login exitoso',
                 user: {
-                    id: userProfile.id_usuario,
-                    nombre: userProfile.nombre,
-                    apellido: userProfile.apellido,
-                    correo: userProfile.correo,
-                    edad: userProfile.edad
+                    id: usuarioData.id_usuario,
+                    nombre: usuarioData.nombre,
+                    apellido: usuarioData.apellido,
+                    correo: usuarioData.correo,
+                    edad: usuarioData.edad
                 },
                 session: data.session,
                 token: data.session?.access_token,
@@ -195,35 +157,22 @@ class AuthController {
             if (error || !user) {
                 return res.status(401).json({ error: 'Token inválido o expirado' });
             }
-            const { data: userData, error: userError } = await supabase_1.supabase
+            const { data: usuarioData, error: usuarioError } = await supabase_1.supabase
                 .from('Usuario')
                 .select('*')
                 .eq('id_usuario', user.id)
-                .maybeSingle();
-            if (userError && userError.code !== 'PGRST116') {
-                console.error('❌ Error obteniendo datos de tabla Usuario:', userError.message);
+                .single();
+            if (usuarioError) {
+                console.error('❌ Error obteniendo perfil:', usuarioError.message);
                 return res.status(500).json({ error: 'Error al obtener perfil' });
             }
-            if (!userData) {
-                console.warn('⚠️ Usuario no encontrado en tabla Usuario, usando datos de Auth');
-                const edad = user.user_metadata?.edad;
-                const age = edad ? this.calculateAge(edad) : null;
-                return res.json({
-                    id: user.id,
-                    nombre: user.user_metadata?.nombre || '',
-                    apellido: user.user_metadata?.apellido || '',
-                    correo: user.email || '',
-                    edad: edad || '',
-                    age: age
-                });
-            }
-            const edad = userData?.edad;
+            const edad = usuarioData?.edad;
             const age = edad ? this.calculateAge(edad) : null;
             res.json({
-                id: userData.id_usuario,
-                nombre: userData.nombre || '',
-                apellido: userData.apellido || '',
-                correo: userData.correo || '',
+                id: usuarioData.id_usuario,
+                nombre: usuarioData.nombre || '',
+                apellido: usuarioData.apellido || '',
+                correo: usuarioData.correo || '',
                 edad: edad || '',
                 age: age
             });
