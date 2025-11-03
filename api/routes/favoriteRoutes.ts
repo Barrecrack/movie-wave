@@ -30,45 +30,41 @@ async function getUserIdFromAuth(token: string): Promise<string | null> {
 }
 
 // 🔥 FUNCIÓN PARA OBTENER/CREAR CONTENIDO DESDE ID NUMÉRICO
-async function getOrCreateContentId(pexelsId: number | string): Promise<string | null> {
+async function getOrCreateContentId(pexelsId: number | string, movieData?: any): Promise<string | null> {
   try {
     console.log(`🔹 Buscando contenido para ID Pexels: ${pexelsId}`);
-    
-    // Primero buscar si ya existe un contenido con este ID de Pexels
+
     const { data: existingContent, error: searchError } = await supabase
       .from('Contenido')
       .select('id_contenido')
       .eq('id_externo', pexelsId.toString())
       .single();
 
-    if (searchError && searchError.code !== 'PGRST116') { // PGRST116 = no encontrado
-      console.error('❌ Error buscando contenido:', searchError.message);
-      return null;
-    }
-
     if (existingContent) {
       console.log(`✅ Contenido existente encontrado: ${existingContent.id_contenido}`);
       return existingContent.id_contenido;
     }
 
-    // Si no existe, crear nuevo contenido
+    // Crear contenido con datos más completos si están disponibles
     console.log('🔹 Creando nuevo contenido en la base de datos...');
     const newContentId = generateUUID();
-    
+
+    const contentData = {
+      id_contenido: newContentId,
+      id_externo: pexelsId.toString(),
+      titulo: movieData?.title || `Video ${pexelsId}`,
+      descripcion: movieData?.description || 'Video obtenido desde Pexels API',
+      tipo: 'video',
+      fecha: new Date().toISOString().split('T')[0],
+      duracion: '00:00',
+      calificacion: 0,
+      poster: movieData?.poster || null, // ❗ Añadir poster
+      genero: movieData?.genre || 'general' // ❗ Añadir género
+    };
+
     const { data: newContent, error: createError } = await supabase
       .from('Contenido')
-      .insert([
-        {
-          id_contenido: newContentId,
-          id_externo: pexelsId.toString(), // Guardar el ID de Pexels como referencia
-          titulo: `Video ${pexelsId}`,
-          descripcion: 'Video obtenido desde Pexels API',
-          tipo: 'video',
-          fecha: new Date().toISOString().split('T')[0],
-          duracion: '00:00',
-          calificacion: 0
-        }
-      ])
+      .insert([contentData])
       .select('id_contenido')
       .single();
 
@@ -102,7 +98,7 @@ router.get('/my-favorites', async (req: Request, res: Response) => {
     }
 
     console.log('🟢 [GET FAVORITES] Obteniendo favoritos para usuario:', userId);
-    
+
     const { data, error } = await supabase
       .from('Favoritos')
       .select(`
@@ -124,14 +120,14 @@ router.get('/my-favorites', async (req: Request, res: Response) => {
       console.error('❌ ERROR SUPABASE DETALLADO:', error);
       throw error;
     }
-    
+
     console.log(`✅ ${data?.length || 0} favoritos encontrados`);
     res.json(data || []);
   } catch (error: any) {
     console.error('❌ ERROR COMPLETO obteniendo favoritos:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Error al obtener favoritos',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -142,7 +138,7 @@ router.get('/my-favorites', async (req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   console.log('🟢 [ADD FAVORITE] Agregando favorito:', req.body);
-  
+
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) {
     return res.status(401).json({ error: 'Token requerido' });
@@ -155,7 +151,7 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     const { id_contenido } = req.body;
-    
+
     if (!id_contenido) {
       return res.status(400).json({ error: 'ID de contenido requerido' });
     }
@@ -164,7 +160,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     // Obtener o crear el UUID del contenido
     const contenidoId = await getOrCreateContentId(id_contenido);
-    
+
     if (!contenidoId) {
       return res.status(400).json({ error: 'Error al procesar el contenido' });
     }
@@ -216,7 +212,7 @@ router.post('/', async (req: Request, res: Response) => {
       console.error('❌ ERROR SUPABASE DETALLADO (INSERT):', error);
       throw error;
     }
-    
+
     console.log('✅ Favorito agregado correctamente');
     res.status(201).json(data[0]);
   } catch (error: any) {
@@ -242,7 +238,7 @@ router.delete('/:contentId', async (req: Request, res: Response) => {
     }
 
     console.log('🟢 [DELETE FAVORITE] Eliminando favorito:', req.params);
-    
+
     const contentId = req.params.contentId;
     if (!contentId) {
       return res.status(400).json({ error: 'ID de contenido requerido' });
@@ -250,7 +246,7 @@ router.delete('/:contentId', async (req: Request, res: Response) => {
 
     // Obtener el UUID del contenido
     let contenidoId: string;
-    
+
     // Si es un UUID válido, usarlo directamente
     if (isValidUUID(contentId)) {
       contenidoId = contentId;
@@ -266,7 +262,7 @@ router.delete('/:contentId', async (req: Request, res: Response) => {
         console.error('❌ Contenido no encontrado para ID:', contentId);
         return res.status(404).json({ error: 'Contenido no encontrado' });
       }
-      
+
       contenidoId = contentData.id_contenido;
     }
 
@@ -281,14 +277,14 @@ router.delete('/:contentId', async (req: Request, res: Response) => {
       console.error('❌ ERROR SUPABASE DETALLADO (DELETE):', error);
       throw error;
     }
-    
+
     console.log('✅ Favorito eliminado correctamente');
     res.json({ message: 'Favorito eliminado' });
   } catch (error: any) {
     console.error('❌ ERROR COMPLETO eliminando favorito:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Error al eliminar favorito',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -310,7 +306,7 @@ router.get('/check/:contentId', async (req: Request, res: Response) => {
     }
 
     console.log('🟢 [CHECK FAVORITE] Verificando favorito:', req.params);
-    
+
     const contentId = req.params.contentId;
     if (!contentId) {
       return res.status(400).json({ error: 'ID de contenido requerido' });
@@ -318,7 +314,7 @@ router.get('/check/:contentId', async (req: Request, res: Response) => {
 
     // Obtener el UUID del contenido
     let contenidoId: string;
-    
+
     if (isValidUUID(contentId)) {
       contenidoId = contentId;
     } else {
@@ -332,7 +328,7 @@ router.get('/check/:contentId', async (req: Request, res: Response) => {
         // Si no existe el contenido, definitivamente no está en favoritos
         return res.json({ isFavorite: false });
       }
-      
+
       contenidoId = contentData.id_contenido;
     }
 
@@ -344,7 +340,7 @@ router.get('/check/:contentId', async (req: Request, res: Response) => {
       .single();
 
     if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
-    
+
     res.json({ isFavorite: !!data });
   } catch (error: any) {
     console.error('❌ Error verificando favorito:', error.message);
@@ -354,7 +350,7 @@ router.get('/check/:contentId', async (req: Request, res: Response) => {
 
 // Función para generar UUID
 function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     const r = Math.random() * 16 | 0;
     const v = c == 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);

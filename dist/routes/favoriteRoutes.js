@@ -27,7 +27,7 @@ async function getUserIdFromAuth(token) {
         return null;
     }
 }
-async function getOrCreateContentId(pexelsId) {
+async function getOrCreateContentId(pexelsId, movieData) {
     try {
         console.log(`🔹 Buscando contenido para ID Pexels: ${pexelsId}`);
         const { data: existingContent, error: searchError } = await supabase_1.supabase
@@ -35,30 +35,27 @@ async function getOrCreateContentId(pexelsId) {
             .select('id_contenido')
             .eq('id_externo', pexelsId.toString())
             .single();
-        if (searchError && searchError.code !== 'PGRST116') {
-            console.error('❌ Error buscando contenido:', searchError.message);
-            return null;
-        }
         if (existingContent) {
             console.log(`✅ Contenido existente encontrado: ${existingContent.id_contenido}`);
             return existingContent.id_contenido;
         }
         console.log('🔹 Creando nuevo contenido en la base de datos...');
         const newContentId = generateUUID();
+        const contentData = {
+            id_contenido: newContentId,
+            id_externo: pexelsId.toString(),
+            titulo: movieData?.title || `Video ${pexelsId}`,
+            descripcion: movieData?.description || 'Video obtenido desde Pexels API',
+            tipo: 'video',
+            fecha: new Date().toISOString().split('T')[0],
+            duracion: '00:00',
+            calificacion: 0,
+            poster: movieData?.poster || null,
+            genero: movieData?.genre || 'general'
+        };
         const { data: newContent, error: createError } = await supabase_1.supabase
             .from('Contenido')
-            .insert([
-            {
-                id_contenido: newContentId,
-                id_externo: pexelsId.toString(),
-                titulo: `Video ${pexelsId}`,
-                descripcion: 'Video obtenido desde Pexels API',
-                tipo: 'video',
-                fecha: new Date().toISOString().split('T')[0],
-                duracion: '00:00',
-                calificacion: 0
-            }
-        ])
+            .insert([contentData])
             .select('id_contenido')
             .single();
         if (createError) {
