@@ -20,7 +20,8 @@ async function getUserIdFromAuth(token: string): Promise<string | null> {
 
     console.log(`🧩 [AUTH] Usuario autenticado Supabase ID: ${user.id}`);
 
-    // Buscar el ID en la tabla Usuario
+    // 🔥 CAMBIO CRÍTICO: Usar directamente el user.id de Supabase Auth
+    // Verificar si existe en tabla Usuario (pero usar auth ID directamente si no)
     const { data: usuario, error: usuarioError } = await supabase
       .from('Usuario')
       .select('id_usuario')
@@ -28,8 +29,10 @@ async function getUserIdFromAuth(token: string): Promise<string | null> {
       .single();
 
     if (usuarioError || !usuario) {
-      console.error('❌ [AUTH] Usuario no encontrado en tabla Usuario');
-      return null;
+      console.warn('⚠️ [AUTH] Usuario no encontrado en tabla Usuario, usando auth ID directamente');
+      // Si no existe en tabla Usuario, usar el auth ID directamente
+      // Esto puede pasar si el trigger no creó el usuario correctamente
+      return user.id;
     }
 
     console.log(`✅ [AUTH] Usuario encontrado en BD: ${usuario.id_usuario}`);
@@ -45,7 +48,7 @@ async function getUserIdFromAuth(token: string): Promise<string | null> {
 /* ──────────────────────────────────────────────── */
 async function getOrCreateContentId(pexelsId: number | string, movieData?: any): Promise<string | null> {
   const startTime = Date.now();
-  console.log(`🎬 [CONTENT] Buscando contenido con ID externo: ${pexelsId}`);
+  console.log(`🎬 [CONTENT] Buscando/creando contenido con ID externo: ${pexelsId}`);
 
   try {
     // Primero buscar por ID externo
@@ -56,11 +59,12 @@ async function getOrCreateContentId(pexelsId: number | string, movieData?: any):
       .single();
 
     if (existingContent && !searchError) {
-      console.log(`✅ [CONTENT] Contenido existente: ${existingContent.id_contenido}`);
+      console.log(`✅ [CONTENT] Contenido existente encontrado: ${existingContent.id_contenido}`);
       return existingContent.id_contenido;
     }
 
-    console.log('🆕 [CONTENT] Creando nuevo contenido en la base de datos...');
+    // Si no existe, crear uno nuevo
+    console.log('🆕 [CONTENT] Creando nuevo contenido...');
     const newContentId = generateUUID();
 
     const contentData = {
@@ -76,7 +80,7 @@ async function getOrCreateContentId(pexelsId: number | string, movieData?: any):
       genero: movieData?.genre || 'general'
     };
 
-    console.log('📝 [CONTENT] Datos a insertar:', contentData);
+    console.log('📝 [CONTENT] Insertando contenido:', contentData);
 
     const { data: newContent, error: createError } = await supabase
       .from('Contenido')
@@ -87,7 +91,7 @@ async function getOrCreateContentId(pexelsId: number | string, movieData?: any):
     if (createError) {
       console.error('❌ [CONTENT] Error creando contenido:', createError);
 
-      // Si falla, intentar buscar nuevamente por si fue creado por otra petición
+      // Intentar buscar nuevamente (por si fue creado concurrentemente)
       const { data: retryContent } = await supabase
         .from('Contenido')
         .select('id_contenido')
@@ -162,21 +166,39 @@ router.post('/', async (req: Request, res: Response) => {
   const startTime = Date.now();
 
   const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Token requerido' });
+  if (!token) {
+    console.error('❌ [ADD FAVORITE] Token no proporcionado');
+    return res.status(401).json({ error: 'Token requerido' });
+  }
 
   try {
     const userId = await getUserIdFromAuth(token);
-    if (!userId) return res.status(401).json({ error: 'Token inválido' });
+    console.log(`🔹 [ADD FAVORITE] User ID obtenido: ${userId}`);
 
-    const { id_contenido } = req.body;
-    if (!id_contenido) return res.status(400).json({ error: 'ID de contenido requerido' });
+    if (!userId) {
+      console.error('❌ [ADD FAVORITE] No se pudo obtener user ID del token');
+      return res.status(401).json({ error: 'Token inválido' });
+    }
+
+    const { id_contenido, movie_data } = req.body;
+    if (!id_contenido) {
+      console.error('❌ [ADD FAVORITE] ID de contenido no proporcionado');
+      return res.status(400).json({ error: 'ID de contenido requerido' });
+    }
 
     console.log(`🔹 [ADD FAVORITE] ID de contenido recibido: ${id_contenido}`);
+    console.log(`🔹 [ADD FAVORITE] Movie data:`, movie_data);
 
-    const contenidoId = await getOrCreateContentId(id_contenido);
-    if (!contenidoId) return res.status(400).json({ error: 'Error al procesar el contenido' });
+    const contenidoId = await getOrCreateContentId(id_contenido, movie_data);
+    console.log(`🔹 [ADD FAVORITE] Contenido ID: ${contenidoId}`);
+
+    if (!contenidoId) {
+      console.error('❌ [ADD FAVORITE] No se pudo obtener/crear contenido ID');
+      return res.status(400).json({ error: 'Error al procesar el contenido' });
+    }
 
     // Verificar si ya existe
+    console.log(`🔹 [ADD FAVORITE] Verificando si ya existe favorito...`);
     const { data: existing, error: checkError } = await supabase
       .from('Favoritos')
       .select('*')
@@ -189,19 +211,24 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Ya está en favoritos' });
     }
 
-    if (checkError && checkError.code !== 'PGRST116') throw checkError;
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('❌ [ADD FAVORITE] Error verificando existencia:', checkError);
+      throw checkError;
+    }
 
     // Insertar favorito
+    const favoritoData = {
+      id_favorito: generateUUID(),
+      id_usuario: userId,
+      id_contenido: contenidoId,
+      fecha_agregado: new Date().toISOString().split('T')[0]
+    };
+
+    console.log('🔹 [ADD FAVORITE] Insertando favorito:', favoritoData);
+
     const { data, error } = await supabase
       .from('Favoritos')
-      .insert([
-        {
-          id_favorito: generateUUID(),
-          id_usuario: userId,
-          id_contenido: contenidoId,
-          fecha_agregado: new Date().toISOString().split('T')[0]
-        }
-      ])
+      .insert([favoritoData])
       .select(`
         *,
         Contenido (
@@ -212,18 +239,26 @@ router.post('/', async (req: Request, res: Response) => {
           duracion,
           tipo,
           fecha,
-          calificacion
+          calificacion,
+          poster,
+          genero
         )
       `);
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ [ADD FAVORITE] Error insertando en Supabase:', error);
+      throw error;
+    }
 
     console.log('✅ [ADD FAVORITE] Favorito agregado correctamente');
+    console.log('📦 [ADD FAVORITE] Datos retornados:', data);
     console.log(`⏱️ [ADD FAVORITE] Tiempo total: ${Date.now() - startTime} ms`);
+
     res.status(201).json(data[0]);
   } catch (error: any) {
     console.error('💥 [ADD FAVORITE] Error agregando favorito:', error.message);
-    res.status(500).json({ error: 'Error al agregar favorito' });
+    console.error('📛 [ADD FAVORITE] Stack:', error.stack);
+    res.status(500).json({ error: 'Error al agregar favorito', details: error.message });
   }
 });
 
