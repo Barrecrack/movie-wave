@@ -6,6 +6,7 @@ import corsMiddleware from './middlewares/cors';
 import authRoutes from './routes/authRoutes';
 import videosRoutes from './routes/videosRoutes'; 
 import favoriteRoutes from './routes/favoriteRoutes';
+import ratingRoutes from './routes/ratingRoutes';
 
 /**
  * @fileoverview Entry point for the Express server configuration.
@@ -69,6 +70,9 @@ app.use('/api', authRoutes);
  * @description Routes to interact with Pexels API for fetching videos.
  */
 app.use('/videos', videosRoutes);
+
+
+app.use('/api/ratings', ratingRoutes);
 
 /**
  * @function app.listen

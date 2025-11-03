@@ -10,6 +10,7 @@ const cors_1 = __importDefault(require("./middlewares/cors"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const videosRoutes_1 = __importDefault(require("./routes/videosRoutes"));
 const favoriteRoutes_1 = __importDefault(require("./routes/favoriteRoutes"));
+const ratingRoutes_1 = __importDefault(require("./routes/ratingRoutes"));
 const app = (0, express_1.default)();
 const port = process.env.PORT || 3000;
 app.use(cors_1.default);
@@ -30,6 +31,7 @@ app.get('/debug', (_, res) => {
 app.use('/api/favorites', favoriteRoutes_1.default);
 app.use('/api', authRoutes_1.default);
 app.use('/videos', videosRoutes_1.default);
+app.use('/api/ratings', ratingRoutes_1.default);
 app.listen(port, () => {
     console.log(`🌐 Servidor corriendo en http://localhost:${port}`);
     console.log(`🔍 Ruta de debug disponible en: http://localhost:${port}/debug`);
