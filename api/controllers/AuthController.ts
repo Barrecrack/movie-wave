@@ -138,7 +138,6 @@ class AuthController {
   async login(req: Request, res: Response) {
     console.log('🟢 [LOGIN] Intento de inicio de sesión:', req.body);
 
-    // 🔥 RECIBIR EN INGLÉS
     const { email, password } = req.body;
 
     try {
@@ -148,46 +147,46 @@ class AuthController {
 
       console.log('🔹 Autenticando usuario...');
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password
+        email,
+        password,
       });
 
-      if (error) {
-        console.error('❌ Error de autenticación:', error.message);
+      if (error || !data.user) {
+        console.error('❌ Error de autenticación:', error?.message);
         return res.status(401).json({ error: 'Credenciales inválidas' });
       }
 
-      // Obtener datos de tabla Usuario
+      // 🔹 Buscar en la tabla Usuario por el id del auth.user
       const { data: usuarioData, error: usuarioError } = await supabase
         .from('Usuario')
         .select('*')
         .eq('id_usuario', data.user.id)
         .single();
 
-      if (usuarioError) {
-        console.error('❌ Error obteniendo datos de usuario:', usuarioError.message);
-        return res.status(500).json({ error: 'Error al obtener datos del usuario' });
+      if (usuarioError || !usuarioData) {
+        console.error('⚠️ Usuario no encontrado en tabla Usuario:', usuarioError?.message);
+        return res.status(404).json({ error: 'Usuario no encontrado en base de datos' });
       }
 
       console.log('✅ Login exitoso para:', data.user.email);
 
-      // 🔥 RESPONDER EN INGLÉS
+      // 🔹 Responder unificado con todos los datos
       res.json({
         message: 'Login exitoso',
         user: {
           id: usuarioData.id_usuario,
-          name: usuarioData.nombre,        // ← inglés
-          lastname: usuarioData.apellido,  // ← inglés
-          email: usuarioData.correo,       // ← inglés
-          birthdate: usuarioData.edad      // ← inglés
+          name: usuarioData.nombre,
+          lastname: usuarioData.apellido,
+          email: usuarioData.correo,
+          birthdate: usuarioData.edad,
         },
         session: data.session,
         token: data.session?.access_token,
-        refresh_token: data.session?.refresh_token
+        refresh_token: data.session?.refresh_token,
       });
     } catch (error: any) {
       console.error('❌ Error en login:', error.message);
-      res.status(500).json({ error: 'Error al iniciar sesión' });
+      res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
 
@@ -203,39 +202,40 @@ class AuthController {
     }
 
     try {
+      // Obtener usuario autenticado desde Auth
       const { data: { user }, error } = await supabase.auth.getUser(token);
-
       if (error || !user) {
         return res.status(401).json({ error: 'Token inválido o expirado' });
       }
 
-      // Obtener datos de tabla Usuario
+      // 🔹 Consultar la tabla Usuario por el id del auth.user
       const { data: usuarioData, error: usuarioError } = await supabase
         .from('Usuario')
         .select('*')
         .eq('id_usuario', user.id)
         .single();
 
-      if (usuarioError) {
-        console.error('❌ Error obteniendo perfil:', usuarioError.message);
-        return res.status(500).json({ error: 'Error al obtener perfil' });
+      if (usuarioError || !usuarioData) {
+        console.error('❌ Error obteniendo perfil:', usuarioError?.message);
+        return res.status(500).json({ error: 'No se encontró perfil en tabla Usuario' });
       }
 
-      const birthdate = usuarioData?.edad; // Cambiar 'edad' por 'birthdate'
+      // Calcular edad si existe fecha de nacimiento
+      const birthdate = usuarioData.edad || '';
       const age = birthdate ? this.calculateAge(birthdate) : null;
 
-      // 🔥 DEVOLVER EN INGLÉS como espera el frontend
+      // 🔹 Devolver perfil completo en inglés
       res.json({
         id: usuarioData.id_usuario,
-        name: usuarioData.nombre || '',        // ← inglés
-        lastname: usuarioData.apellido || '',  // ← inglés
-        email: usuarioData.correo || '',       // ← inglés
-        birthdate: birthdate || '',            // ← inglés
-        age: age
+        name: usuarioData.nombre || '',
+        lastname: usuarioData.apellido || '',
+        email: usuarioData.correo || '',
+        birthdate: birthdate,
+        age: age,
       });
     } catch (error: any) {
       console.error('❌ Error obteniendo perfil:', error.message);
-      res.status(500).json({ error: 'Error al obtener perfil' });
+      res.status(500).json({ error: 'Error al obtener perfil del usuario' });
     }
   }
 
@@ -243,7 +243,7 @@ class AuthController {
    * UPDATE USER - Actualiza en Auth y Usuario
    */
   async updateUser(req: Request, res: Response) {
-    console.log('🟢 [UPDATE USER] Solicitud de actualización recibida.');
+    console.log('🟢 [UPDATE USER] Solicitud recibida.');
     const token = req.headers.authorization?.split(' ')[1];
 
     if (!token) {
@@ -251,62 +251,63 @@ class AuthController {
     }
 
     try {
+      // Obtener usuario desde Auth
       const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
       if (userError || !user) {
         return res.status(401).json({ error: 'Token inválido o expirado' });
       }
 
-      // 🔥 RECIBIR DATOS EN INGLÉS del frontend
+      // Datos recibidos desde frontend
       const { name, lastname, email, birthdate } = req.body;
 
-      console.log('🔹 Actualizando datos del usuario:', user.email);
+      console.log('🔹 Actualizando usuario:', user.email);
 
-      // Actualizar en Auth (metadatos)
+      // 🔹 Actualizar en Auth (solo si hay email o metadatos)
       const authUpdates: any = {};
-      if (name !== undefined) authUpdates.data = { ...authUpdates.data, nombre: name };
-      if (lastname !== undefined) authUpdates.data = { ...authUpdates.data, apellido: lastname };
-      if (email !== undefined) authUpdates.email = email;
+      if (email) authUpdates.email = email;
+      if (name || lastname) {
+        authUpdates.data = {
+          ...(user.user_metadata || {}),
+          ...(name && { nombre: name }),
+          ...(lastname && { apellido: lastname }),
+        };
+      }
 
       if (Object.keys(authUpdates).length > 0) {
         const { error: authError } = await supabase.auth.updateUser(authUpdates);
         if (authError) throw authError;
       }
 
-      // Actualizar en tabla Usuario - CONVERTIR a español para la base de datos
+      // 🔹 Actualizar tabla Usuario
       const userUpdates: any = {};
       if (name !== undefined) userUpdates.nombre = name;
       if (lastname !== undefined) userUpdates.apellido = lastname;
       if (email !== undefined) userUpdates.correo = email;
-      if (birthdate !== undefined) userUpdates.edad = new Date(birthdate).toISOString().split('T')[0];
+      if (birthdate !== undefined)
+        userUpdates.edad = new Date(birthdate).toISOString().split('T')[0];
 
-      if (Object.keys(userUpdates).length > 0) {
-        const { data: userData, error: userUpdateError } = await supabase
-          .from('Usuario')
-          .update(userUpdates)
-          .eq('id_usuario', user.id)
-          .select()
-          .single();
+      const { data: userData, error: userUpdateError } = await supabase
+        .from('Usuario')
+        .update(userUpdates)
+        .eq('id_usuario', user.id)
+        .select()
+        .single();
 
-        if (userUpdateError) throw userUpdateError;
+      if (userUpdateError) throw userUpdateError;
 
-        console.log('✅ Usuario actualizado correctamente:', user.email);
+      console.log('✅ Usuario actualizado correctamente.');
 
-        // 🔥 RESPONDER EN INGLÉS
-        res.json({
-          message: 'Usuario actualizado exitosamente',
-          user: {
-            id: userData.id_usuario,
-            name: userData.nombre,
-            lastname: userData.apellido,
-            email: userData.correo,
-            birthdate: userData.edad
-          }
-        });
-      } else {
-        res.status(400).json({ error: 'No se proporcionaron datos para actualizar' });
-      }
-
+      // 🔹 Devolver resultado unificado
+      res.json({
+        message: 'Usuario actualizado exitosamente',
+        user: {
+          id: userData.id_usuario,
+          name: userData.nombre,
+          lastname: userData.apellido,
+          email: userData.correo,
+          birthdate: userData.edad,
+        },
+      });
     } catch (error: any) {
       console.error('❌ Error en update-user:', error.message);
       res.status(500).json({ error: 'Error al actualizar usuario' });
