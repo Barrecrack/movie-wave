@@ -32,23 +32,47 @@ class AuthController {
   }
 
   /**
+   * Normalizes user data from different field names (english/spanish)
+   */
+  private normalizeUserData(body: any) {
+    return {
+      // Campos en español (prioridad)
+      nombre: body.nombre || body.name,
+      apellido: body.apellido || body.lastname,
+      correo: body.correo || body.email,
+      contrasena: body.contrasena || body.password,
+      edad: body.edad || body.birthdate,
+      
+      // Campos en inglés (backward compatibility)
+      name: body.name || body.nombre,
+      lastname: body.lastname || body.apellido,
+      email: body.email || body.correo,
+      password: body.password || body.contrasena,
+      birthdate: body.birthdate || body.edad
+    };
+  }
+
+  /**
    * Registers a new user in Supabase and creates entry in Usuario table.
    * 
    * @async
    * @function register
-   * @param {Request} req - Express request object containing email, password, nombre, apellido, and edad.
+   * @param {Request} req - Express request object containing user data.
    * @param {Response} res - Express response object.
    * @returns {Promise<void>} Responds with the created user or an error message.
    */
   async register(req: Request, res: Response) {
     console.log('🟢 [REGISTER] Solicitud recibida con body:', req.body);
-    const { correo, contrasena, nombre, apellido, edad } = req.body;
+    
+    // Normalizar datos (acepta inglés y español)
+    const normalizedData = this.normalizeUserData(req.body);
+    const { nombre, apellido, correo, contrasena, edad } = normalizedData;
 
     try {
       // Validar campos requeridos
       if (!correo || !contrasena || !nombre || !apellido) {
         return res.status(400).json({ 
-          error: 'Correo, contraseña, nombre y apellido son requeridos' 
+          error: 'Correo/email, contraseña/password, nombre/name y apellido/lastname son requeridos' 
         });
       }
 
@@ -88,7 +112,7 @@ class AuthController {
             nombre,
             apellido,
             correo,
-            contrasena: contrasena, // En producción, considerar hashing adicional
+            contrasena: contrasena,
             edad: edad ? new Date(edad).toISOString() : null
           }
         ])
@@ -99,7 +123,6 @@ class AuthController {
         console.error('❌ Error creando usuario en tabla Usuario:', userError.message);
         
         // Si falla la creación en la tabla, no podemos eliminar el usuario de Auth desde el cliente
-        // Esto requeriría una función edge o admin
         console.warn('⚠️ Usuario creado en Auth pero no en tabla Usuario. Se requiere limpieza manual.');
         
         return res.status(400).json({ 
@@ -133,17 +156,20 @@ class AuthController {
    * 
    * @async
    * @function login
-   * @param {Request} req - Express request containing correo and contrasena.
+   * @param {Request} req - Express request containing user credentials.
    * @param {Response} res - Express response object.
    * @returns {Promise<void>} Returns the authenticated user, session, and JWT tokens.
    */
   async login(req: Request, res: Response) {
-    console.log('🟢 [LOGIN] Intento de inicio de sesión con correo:', req.body.correo);
-    const { correo, contrasena } = req.body;
+    console.log('🟢 [LOGIN] Intento de inicio de sesión con body:', req.body);
+    
+    // Normalizar datos
+    const normalizedData = this.normalizeUserData(req.body);
+    const { correo, contrasena } = normalizedData;
 
     try {
       if (!correo || !contrasena) {
-        return res.status(400).json({ error: 'Correo y contraseña son requeridos' });
+        return res.status(400).json({ error: 'Correo/email y contraseña/password son requeridos' });
       }
 
       console.log('🔹 Autenticando usuario...');
@@ -192,7 +218,7 @@ class AuthController {
   }
 
   /**
-   * Updates user information such as nombre, apellido, correo, or edad.
+   * Updates user information.
    * Requires a valid authentication token.
    * 
    * @async
@@ -219,7 +245,10 @@ class AuthController {
         return res.status(401).json({ error: 'Token inválido o expirado' });
       }
 
-      const { nombre, apellido, correo, edad } = req.body;
+      // Normalizar datos del body
+      const normalizedData = this.normalizeUserData(req.body);
+      const { nombre, apellido, correo, edad } = normalizedData;
+
       console.log('🔹 Actualizando datos del usuario:', user.email);
 
       // Actualizar en Auth (metadatos)
@@ -270,16 +299,19 @@ class AuthController {
    * 
    * @async
    * @function forgotPassword
-   * @param {Request} req - Express request containing the user's correo.
+   * @param {Request} req - Express request containing the user's email.
    * @param {Response} res - Express response object.
    * @returns {Promise<void>} Returns a success message or an error.
    */
   async forgotPassword(req: Request, res: Response) {
-    console.log('🟢 [FORGOT PASSWORD] Solicitud recibida para:', req.body.correo);
-    const { correo } = req.body;
+    console.log('🟢 [FORGOT PASSWORD] Solicitud recibida para:', req.body);
+    
+    // Normalizar datos
+    const normalizedData = this.normalizeUserData(req.body);
+    const { correo } = normalizedData;
 
     if (!correo) {
-      return res.status(400).json({ error: 'Correo es requerido' });
+      return res.status(400).json({ error: 'Correo/email es requerido' });
     }
 
     try {

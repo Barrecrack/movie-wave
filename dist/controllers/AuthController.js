@@ -17,13 +17,28 @@ class AuthController {
         }
         return age;
     }
+    normalizeUserData(body) {
+        return {
+            nombre: body.nombre || body.name,
+            apellido: body.apellido || body.lastname,
+            correo: body.correo || body.email,
+            contrasena: body.contrasena || body.password,
+            edad: body.edad || body.birthdate,
+            name: body.name || body.nombre,
+            lastname: body.lastname || body.apellido,
+            email: body.email || body.correo,
+            password: body.password || body.contrasena,
+            birthdate: body.birthdate || body.edad
+        };
+    }
     async register(req, res) {
         console.log('🟢 [REGISTER] Solicitud recibida con body:', req.body);
-        const { correo, contrasena, nombre, apellido, edad } = req.body;
+        const normalizedData = this.normalizeUserData(req.body);
+        const { nombre, apellido, correo, contrasena, edad } = normalizedData;
         try {
             if (!correo || !contrasena || !nombre || !apellido) {
                 return res.status(400).json({
-                    error: 'Correo, contraseña, nombre y apellido son requeridos'
+                    error: 'Correo/email, contraseña/password, nombre/name y apellido/lastname son requeridos'
                 });
             }
             console.log('🔹 Registrando usuario en Supabase Auth...');
@@ -88,11 +103,12 @@ class AuthController {
         }
     }
     async login(req, res) {
-        console.log('🟢 [LOGIN] Intento de inicio de sesión con correo:', req.body.correo);
-        const { correo, contrasena } = req.body;
+        console.log('🟢 [LOGIN] Intento de inicio de sesión con body:', req.body);
+        const normalizedData = this.normalizeUserData(req.body);
+        const { correo, contrasena } = normalizedData;
         try {
             if (!correo || !contrasena) {
-                return res.status(400).json({ error: 'Correo y contraseña son requeridos' });
+                return res.status(400).json({ error: 'Correo/email y contraseña/password son requeridos' });
             }
             console.log('🔹 Autenticando usuario...');
             const { data, error } = await supabase_1.supabase.auth.signInWithPassword({
@@ -146,7 +162,8 @@ class AuthController {
                 console.error('❌ No se pudo obtener usuario con el token.');
                 return res.status(401).json({ error: 'Token inválido o expirado' });
             }
-            const { nombre, apellido, correo, edad } = req.body;
+            const normalizedData = this.normalizeUserData(req.body);
+            const { nombre, apellido, correo, edad } = normalizedData;
             console.log('🔹 Actualizando datos del usuario:', user.email);
             const authUpdates = {};
             if (nombre !== undefined)
@@ -194,10 +211,11 @@ class AuthController {
         }
     }
     async forgotPassword(req, res) {
-        console.log('🟢 [FORGOT PASSWORD] Solicitud recibida para:', req.body.correo);
-        const { correo } = req.body;
+        console.log('🟢 [FORGOT PASSWORD] Solicitud recibida para:', req.body);
+        const normalizedData = this.normalizeUserData(req.body);
+        const { correo } = normalizedData;
         if (!correo) {
-            return res.status(400).json({ error: 'Correo es requerido' });
+            return res.status(400).json({ error: 'Correo/email es requerido' });
         }
         try {
             console.log('🔹 Generando token de recuperación...');
