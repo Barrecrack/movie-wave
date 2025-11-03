@@ -171,8 +171,7 @@ router.get('/my-favorites', async (req, res) => {
           tipo,
           fecha,
           calificacion,
-          poster,
-          genero
+          genero,
         )
       `)
             .eq('id_usuario', userId);
