@@ -22,6 +22,52 @@ async function getUserIdFromAuth(token) {
         return null;
     }
 }
+async function getOrCreateContentId(pexelsId) {
+    try {
+        console.log(`🔹 Buscando contenido para ID Pexels: ${pexelsId}`);
+        const { data: existingContent, error: searchError } = await supabase_1.supabase
+            .from('Contenido')
+            .select('id_contenido')
+            .eq('id_externo', pexelsId.toString())
+            .single();
+        if (searchError && searchError.code !== 'PGRST116') {
+            console.error('❌ Error buscando contenido:', searchError.message);
+            return null;
+        }
+        if (existingContent) {
+            console.log(`✅ Contenido existente encontrado: ${existingContent.id_contenido}`);
+            return existingContent.id_contenido;
+        }
+        console.log('🔹 Creando nuevo contenido en la base de datos...');
+        const newContentId = generateUUID();
+        const { data: newContent, error: createError } = await supabase_1.supabase
+            .from('Contenido')
+            .insert([
+            {
+                id_contenido: newContentId,
+                id_externo: pexelsId.toString(),
+                titulo: `Video ${pexelsId}`,
+                descripcion: 'Video obtenido desde Pexels API',
+                tipo: 'video',
+                fecha: new Date().toISOString().split('T')[0],
+                duracion: '00:00',
+                calificacion: 0
+            }
+        ])
+            .select('id_contenido')
+            .single();
+        if (createError) {
+            console.error('❌ Error creando contenido:', createError.message);
+            return null;
+        }
+        console.log(`✅ Nuevo contenido creado: ${newContent.id_contenido}`);
+        return newContent.id_contenido;
+    }
+    catch (error) {
+        console.error('❌ Error en getOrCreateContentId:', error.message);
+        return null;
+    }
+}
 router.get('/my-favorites', async (req, res) => {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
@@ -39,6 +85,7 @@ router.get('/my-favorites', async (req, res) => {
         *,
         Contenido (
           id_contenido,
+          id_externo,
           titulo,
           descripcion,
           duracion,
@@ -78,12 +125,21 @@ router.post('/', async (req, res) => {
         if (!id_contenido) {
             return res.status(400).json({ error: 'ID de contenido requerido' });
         }
-        const { data: existing } = await supabase_1.supabase
+        console.log(`🔹 ID de contenido recibido: ${id_contenido} (tipo: ${typeof id_contenido})`);
+        const contenidoId = await getOrCreateContentId(id_contenido);
+        if (!contenidoId) {
+            return res.status(400).json({ error: 'Error al procesar el contenido' });
+        }
+        const { data: existing, error: checkError } = await supabase_1.supabase
             .from('Favoritos')
             .select('*')
             .eq('id_usuario', userId)
-            .eq('id_contenido', id_contenido)
+            .eq('id_contenido', contenidoId)
             .single();
+        if (checkError && checkError.code !== 'PGRST116') {
+            console.error('❌ Error verificando favorito existente:', checkError.message);
+            throw checkError;
+        }
         if (existing) {
             console.log('⚠️ Ya existe en favoritos');
             return res.status(400).json({ error: 'Ya está en favoritos' });
@@ -94,11 +150,23 @@ router.post('/', async (req, res) => {
             {
                 id_favorito: generateUUID(),
                 id_usuario: userId,
-                id_contenido: id_contenido,
+                id_contenido: contenidoId,
                 fecha_agregado: new Date().toISOString().split('T')[0]
             }
         ])
-            .select('*');
+            .select(`
+        *,
+        Contenido (
+          id_contenido,
+          id_externo,
+          titulo,
+          descripcion,
+          duracion,
+          tipo,
+          fecha,
+          calificacion
+        )
+      `);
         if (error) {
             console.error('❌ ERROR SUPABASE DETALLADO (INSERT):', error);
             throw error;
@@ -126,12 +194,28 @@ router.delete('/:contentId', async (req, res) => {
         if (!contentId) {
             return res.status(400).json({ error: 'ID de contenido requerido' });
         }
-        console.log('🔹 Ejecutando DELETE en Supabase...');
+        let contenidoId;
+        if (isValidUUID(contentId)) {
+            contenidoId = contentId;
+        }
+        else {
+            const { data: contentData, error: contentError } = await supabase_1.supabase
+                .from('Contenido')
+                .select('id_contenido')
+                .eq('id_externo', contentId.toString())
+                .single();
+            if (contentError || !contentData) {
+                console.error('❌ Contenido no encontrado para ID:', contentId);
+                return res.status(404).json({ error: 'Contenido no encontrado' });
+            }
+            contenidoId = contentData.id_contenido;
+        }
+        console.log(`🔹 Ejecutando DELETE para contenido UUID: ${contenidoId}`);
         const { error } = await supabase_1.supabase
             .from('Favoritos')
             .delete()
             .eq('id_usuario', userId)
-            .eq('id_contenido', contentId);
+            .eq('id_contenido', contenidoId);
         if (error) {
             console.error('❌ ERROR SUPABASE DETALLADO (DELETE):', error);
             throw error;
@@ -162,11 +246,26 @@ router.get('/check/:contentId', async (req, res) => {
         if (!contentId) {
             return res.status(400).json({ error: 'ID de contenido requerido' });
         }
+        let contenidoId;
+        if (isValidUUID(contentId)) {
+            contenidoId = contentId;
+        }
+        else {
+            const { data: contentData, error: contentError } = await supabase_1.supabase
+                .from('Contenido')
+                .select('id_contenido')
+                .eq('id_externo', contentId.toString())
+                .single();
+            if (contentError || !contentData) {
+                return res.json({ isFavorite: false });
+            }
+            contenidoId = contentData.id_contenido;
+        }
         const { data, error } = await supabase_1.supabase
             .from('Favoritos')
             .select('*')
             .eq('id_usuario', userId)
-            .eq('id_contenido', contentId)
+            .eq('id_contenido', contenidoId)
             .single();
         if (error && error.code !== 'PGRST116')
             throw error;
@@ -183,5 +282,9 @@ function generateUUID() {
         const v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
+}
+function isValidUUID(uuid) {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
 }
 exports.default = router;

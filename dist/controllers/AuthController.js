@@ -54,12 +54,6 @@ class AuthController {
                     error: 'Correo/email, contraseña/password, nombre/name y apellido/lastname son requeridos'
                 });
             }
-            const userExists = await this.checkUserExists(correo);
-            if (userExists) {
-                return res.status(400).json({
-                    error: 'Ya existe un usuario registrado con este correo electrónico'
-                });
-            }
             console.log('🔹 Registrando usuario en Supabase Auth...');
             const { data: authData, error: authError } = await supabase_1.supabase.auth.signUp({
                 email: correo,
@@ -80,8 +74,9 @@ class AuthController {
                 return res.status(400).json({ error: 'No se pudo crear el usuario en Auth' });
             }
             console.log('✅ Usuario registrado en Auth:', authData.user.email);
+            let userData;
             console.log('🔹 Creando usuario en tabla Usuario...');
-            const { data: userData, error: userError } = await supabase_1.supabase
+            const { data: newUserData, error: userError } = await supabase_1.supabase
                 .from('Usuario')
                 .insert([
                 {
@@ -97,17 +92,28 @@ class AuthController {
                 .single();
             if (userError) {
                 console.error('❌ Error creando usuario en tabla Usuario:', userError.message);
-                try {
-                    console.warn('⚠️ Usuario creado en Auth pero no en tabla Usuario. ID:', authData.user.id);
+                if (userError.code === '23505') {
+                    console.log('🔄 Usuario ya existe en tabla, obteniendo datos...');
+                    const { data: existingUser, error: fetchError } = await supabase_1.supabase
+                        .from('Usuario')
+                        .select('*')
+                        .eq('id_usuario', authData.user.id)
+                        .single();
+                    if (fetchError) {
+                        console.error('❌ Error obteniendo usuario existente:', fetchError.message);
+                        throw fetchError;
+                    }
+                    console.log('✅ Usuario existente obtenido:', existingUser.id_usuario);
+                    userData = existingUser;
                 }
-                catch (cleanupError) {
-                    console.error('⚠️ No se pudo limpiar usuario de Auth:', cleanupError);
+                else {
+                    throw userError;
                 }
-                return res.status(400).json({
-                    error: 'Error al completar el registro. Por favor, contacte soporte.'
-                });
             }
-            console.log('✅ Usuario creado en tabla Usuario:', userData.id_usuario);
+            else {
+                console.log('✅ Usuario creado en tabla Usuario:', newUserData.id_usuario);
+                userData = newUserData;
+            }
             res.status(201).json({
                 message: 'Usuario registrado exitosamente',
                 user: {
