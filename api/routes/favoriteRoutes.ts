@@ -7,19 +7,24 @@ const router = express.Router();
 // 🔥 FUNCIÓN CORREGIDA PARA OBTENER UUID DEL USUARIO
 async function getUserIdFromAuth(token: string): Promise<string | null> {
   try {
-    console.log('🔍 Buscando usuario autenticado...');
-    
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) {
-      console.error('❌ Error obteniendo usuario de Auth:', authError?.message);
+    if (authError || !user) return null;
+
+    // 🔹 Buscar el ID real del usuario en tu tabla Usuario
+    const { data: usuario, error: usuarioError } = await supabase
+      .from('Usuario')
+      .select('id_usuario')
+      .eq('id_usuario', user.id)
+      .single();
+
+    if (usuarioError || !usuario) {
+      console.error('❌ Usuario no encontrado en tabla Usuario');
       return null;
     }
 
-    console.log('✅ Usuario Auth encontrado:', user.id);
-    return user.id;
-  } catch (error: any) {
-    console.error('❌ Error en getUserIdFromAuth:', error.message);
+    return usuario.id_usuario;
+  } catch (error) {
+    console.error('❌ Error en getUserIdFromAuth:', error);
     return null;
   }
 }

@@ -107,11 +107,11 @@ class AuthController {
             }
             console.log('🔹 Autenticando usuario...');
             const { data, error } = await supabase_1.supabase.auth.signInWithPassword({
-                email: email,
-                password: password
+                email,
+                password,
             });
-            if (error) {
-                console.error('❌ Error de autenticación:', error.message);
+            if (error || !data.user) {
+                console.error('❌ Error de autenticación:', error?.message);
                 return res.status(401).json({ error: 'Credenciales inválidas' });
             }
             const { data: usuarioData, error: usuarioError } = await supabase_1.supabase
@@ -119,9 +119,9 @@ class AuthController {
                 .select('*')
                 .eq('id_usuario', data.user.id)
                 .single();
-            if (usuarioError) {
-                console.error('❌ Error obteniendo datos de usuario:', usuarioError.message);
-                return res.status(500).json({ error: 'Error al obtener datos del usuario' });
+            if (usuarioError || !usuarioData) {
+                console.error('⚠️ Usuario no encontrado en tabla Usuario:', usuarioError?.message);
+                return res.status(404).json({ error: 'Usuario no encontrado en base de datos' });
             }
             console.log('✅ Login exitoso para:', data.user.email);
             res.json({
@@ -131,16 +131,16 @@ class AuthController {
                     name: usuarioData.nombre,
                     lastname: usuarioData.apellido,
                     email: usuarioData.correo,
-                    birthdate: usuarioData.edad
+                    birthdate: usuarioData.edad,
                 },
                 session: data.session,
                 token: data.session?.access_token,
-                refresh_token: data.session?.refresh_token
+                refresh_token: data.session?.refresh_token,
             });
         }
         catch (error) {
             console.error('❌ Error en login:', error.message);
-            res.status(500).json({ error: 'Error al iniciar sesión' });
+            res.status(500).json({ error: 'Error interno del servidor' });
         }
     }
     async getUserProfile(req, res) {
@@ -159,28 +159,28 @@ class AuthController {
                 .select('*')
                 .eq('id_usuario', user.id)
                 .single();
-            if (usuarioError) {
-                console.error('❌ Error obteniendo perfil:', usuarioError.message);
-                return res.status(500).json({ error: 'Error al obtener perfil' });
+            if (usuarioError || !usuarioData) {
+                console.error('❌ Error obteniendo perfil:', usuarioError?.message);
+                return res.status(500).json({ error: 'No se encontró perfil en tabla Usuario' });
             }
-            const birthdate = usuarioData?.edad;
+            const birthdate = usuarioData.edad || '';
             const age = birthdate ? this.calculateAge(birthdate) : null;
             res.json({
                 id: usuarioData.id_usuario,
                 name: usuarioData.nombre || '',
                 lastname: usuarioData.apellido || '',
                 email: usuarioData.correo || '',
-                birthdate: birthdate || '',
-                age: age
+                birthdate: birthdate,
+                age: age,
             });
         }
         catch (error) {
             console.error('❌ Error obteniendo perfil:', error.message);
-            res.status(500).json({ error: 'Error al obtener perfil' });
+            res.status(500).json({ error: 'Error al obtener perfil del usuario' });
         }
     }
     async updateUser(req, res) {
-        console.log('🟢 [UPDATE USER] Solicitud de actualización recibida.');
+        console.log('🟢 [UPDATE USER] Solicitud recibida.');
         const token = req.headers.authorization?.split(' ')[1];
         if (!token) {
             return res.status(401).json({ error: 'Token requerido' });
@@ -191,14 +191,17 @@ class AuthController {
                 return res.status(401).json({ error: 'Token inválido o expirado' });
             }
             const { name, lastname, email, birthdate } = req.body;
-            console.log('🔹 Actualizando datos del usuario:', user.email);
+            console.log('🔹 Actualizando usuario:', user.email);
             const authUpdates = {};
-            if (name !== undefined)
-                authUpdates.data = { ...authUpdates.data, nombre: name };
-            if (lastname !== undefined)
-                authUpdates.data = { ...authUpdates.data, apellido: lastname };
-            if (email !== undefined)
+            if (email)
                 authUpdates.email = email;
+            if (name || lastname) {
+                authUpdates.data = {
+                    ...(user.user_metadata || {}),
+                    ...(name && { nombre: name }),
+                    ...(lastname && { apellido: lastname }),
+                };
+            }
             if (Object.keys(authUpdates).length > 0) {
                 const { error: authError } = await supabase_1.supabase.auth.updateUser(authUpdates);
                 if (authError)
@@ -213,30 +216,25 @@ class AuthController {
                 userUpdates.correo = email;
             if (birthdate !== undefined)
                 userUpdates.edad = new Date(birthdate).toISOString().split('T')[0];
-            if (Object.keys(userUpdates).length > 0) {
-                const { data: userData, error: userUpdateError } = await supabase_1.supabase
-                    .from('Usuario')
-                    .update(userUpdates)
-                    .eq('id_usuario', user.id)
-                    .select()
-                    .single();
-                if (userUpdateError)
-                    throw userUpdateError;
-                console.log('✅ Usuario actualizado correctamente:', user.email);
-                res.json({
-                    message: 'Usuario actualizado exitosamente',
-                    user: {
-                        id: userData.id_usuario,
-                        name: userData.nombre,
-                        lastname: userData.apellido,
-                        email: userData.correo,
-                        birthdate: userData.edad
-                    }
-                });
-            }
-            else {
-                res.status(400).json({ error: 'No se proporcionaron datos para actualizar' });
-            }
+            const { data: userData, error: userUpdateError } = await supabase_1.supabase
+                .from('Usuario')
+                .update(userUpdates)
+                .eq('id_usuario', user.id)
+                .select()
+                .single();
+            if (userUpdateError)
+                throw userUpdateError;
+            console.log('✅ Usuario actualizado correctamente.');
+            res.json({
+                message: 'Usuario actualizado exitosamente',
+                user: {
+                    id: userData.id_usuario,
+                    name: userData.nombre,
+                    lastname: userData.apellido,
+                    email: userData.correo,
+                    birthdate: userData.edad,
+                },
+            });
         }
         catch (error) {
             console.error('❌ Error en update-user:', error.message);
