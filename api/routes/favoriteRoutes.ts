@@ -168,12 +168,12 @@ router.post('/', async (req: Request, res: Response) => {
     const userId = await getUserIdFromAuth(token);
     if (!userId) return res.status(401).json({ error: 'Token inválido' });
 
-    const { id_contenido } = req.body;
-    if (!id_contenido) return res.status(400).json({ error: 'ID de contenido requerido' });
+    const { id_externo, movie_data } = req.body;
+    if (!id_externo) return res.status(400).json({ error: 'ID externo requerido' });
 
-    console.log(`🔹 [ADD FAVORITE] ID de contenido recibido: ${id_contenido}`);
+    console.log(`🔹 [ADD FAVORITE] ID externo recibido: ${id_externo}`);
 
-    const contenidoId = await getOrCreateContentId(id_contenido);
+    const contenidoId = await getOrCreateContentId(id_externo, movie_data);
     if (!contenidoId) return res.status(400).json({ error: 'Error al procesar el contenido' });
 
     // Verificar si ya existe
