@@ -24,12 +24,25 @@ class AuthController {
             correo: body.correo || body.email,
             contrasena: body.contrasena || body.password,
             edad: body.edad || body.birthdate,
-            name: body.name || body.nombre,
-            lastname: body.lastname || body.apellido,
-            email: body.email || body.correo,
-            password: body.password || body.contrasena,
-            birthdate: body.birthdate || body.edad
         };
+    }
+    async checkUserExists(correo) {
+        try {
+            const { data, error } = await supabase_1.supabase
+                .from('Usuario')
+                .select('id_usuario')
+                .eq('correo', correo)
+                .maybeSingle();
+            if (error) {
+                console.error('❌ Error verificando usuario existente:', error.message);
+                return false;
+            }
+            return !!data;
+        }
+        catch (error) {
+            console.error('❌ Error en checkUserExists:', error);
+            return false;
+        }
     }
     async register(req, res) {
         console.log('🟢 [REGISTER] Solicitud recibida con body:', req.body);
@@ -39,6 +52,12 @@ class AuthController {
             if (!correo || !contrasena || !nombre || !apellido) {
                 return res.status(400).json({
                     error: 'Correo/email, contraseña/password, nombre/name y apellido/lastname son requeridos'
+                });
+            }
+            const userExists = await this.checkUserExists(correo);
+            if (userExists) {
+                return res.status(400).json({
+                    error: 'Ya existe un usuario registrado con este correo electrónico'
                 });
             }
             console.log('🔹 Registrando usuario en Supabase Auth...');
@@ -71,16 +90,21 @@ class AuthController {
                     apellido,
                     correo,
                     contrasena: contrasena,
-                    edad: edad ? new Date(edad).toISOString() : null
+                    edad: edad ? new Date(edad).toISOString().split('T')[0] : null
                 }
             ])
                 .select()
                 .single();
             if (userError) {
                 console.error('❌ Error creando usuario en tabla Usuario:', userError.message);
-                console.warn('⚠️ Usuario creado en Auth pero no en tabla Usuario. Se requiere limpieza manual.');
+                try {
+                    console.warn('⚠️ Usuario creado en Auth pero no en tabla Usuario. ID:', authData.user.id);
+                }
+                catch (cleanupError) {
+                    console.error('⚠️ No se pudo limpiar usuario de Auth:', cleanupError);
+                }
                 return res.status(400).json({
-                    error: 'Usuario creado en autenticación pero error en base de datos. Contacte soporte.'
+                    error: 'Error al completar el registro. Por favor, contacte soporte.'
                 });
             }
             console.log('✅ Usuario creado en tabla Usuario:', userData.id_usuario);
@@ -115,25 +139,34 @@ class AuthController {
                 email: correo,
                 password: contrasena
             });
-            if (error)
-                throw error;
+            if (error) {
+                console.error('❌ Error de autenticación:', error.message);
+                return res.status(401).json({ error: 'Credenciales inválidas' });
+            }
             const { data: userData, error: userError } = await supabase_1.supabase
                 .from('Usuario')
                 .select('*')
                 .eq('id_usuario', data.user.id)
-                .single();
-            if (userError) {
+                .maybeSingle();
+            if (userError && userError.code !== 'PGRST116') {
                 console.error('❌ Error obteniendo datos del usuario:', userError.message);
             }
             console.log('✅ Login exitoso para:', data.user.email);
+            const userProfile = userData || {
+                id_usuario: data.user.id,
+                nombre: data.user.user_metadata?.nombre || '',
+                apellido: data.user.user_metadata?.apellido || '',
+                correo: data.user.email || '',
+                edad: data.user.user_metadata?.edad || null
+            };
             res.json({
                 message: 'Login exitoso',
                 user: {
-                    id: data.user.id,
-                    nombre: userData?.nombre || data.user.user_metadata?.nombre,
-                    apellido: userData?.apellido || data.user.user_metadata?.apellido,
-                    correo: data.user.email,
-                    edad: userData?.edad
+                    id: userProfile.id_usuario,
+                    nombre: userProfile.nombre,
+                    apellido: userProfile.apellido,
+                    correo: userProfile.correo,
+                    edad: userProfile.edad
                 },
                 session: data.session,
                 token: data.session?.access_token,
@@ -142,24 +175,67 @@ class AuthController {
         }
         catch (error) {
             console.error('❌ Error en login:', error.message);
-            if (error.message.includes('Invalid login credentials')) {
-                return res.status(401).json({ error: 'Credenciales inválidas' });
-            }
             res.status(500).json({ error: 'Error al iniciar sesión' });
+        }
+    }
+    async getUserProfile(req, res) {
+        console.log('🟢 [GET USER PROFILE] Solicitud recibida');
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) {
+            return res.status(401).json({ error: 'Token requerido' });
+        }
+        try {
+            const { data: { user }, error } = await supabase_1.supabase.auth.getUser(token);
+            if (error || !user) {
+                return res.status(401).json({ error: 'Token inválido o expirado' });
+            }
+            const { data: userData, error: userError } = await supabase_1.supabase
+                .from('Usuario')
+                .select('*')
+                .eq('id_usuario', user.id)
+                .maybeSingle();
+            if (userError && userError.code !== 'PGRST116') {
+                console.error('❌ Error obteniendo datos de tabla Usuario:', userError.message);
+                return res.status(500).json({ error: 'Error al obtener perfil' });
+            }
+            if (!userData) {
+                console.warn('⚠️ Usuario no encontrado en tabla Usuario, usando datos de Auth');
+                const edad = user.user_metadata?.edad;
+                const age = edad ? this.calculateAge(edad) : null;
+                return res.json({
+                    id: user.id,
+                    nombre: user.user_metadata?.nombre || '',
+                    apellido: user.user_metadata?.apellido || '',
+                    correo: user.email || '',
+                    edad: edad || '',
+                    age: age
+                });
+            }
+            const edad = userData?.edad;
+            const age = edad ? this.calculateAge(edad) : null;
+            res.json({
+                id: userData.id_usuario,
+                nombre: userData.nombre || '',
+                apellido: userData.apellido || '',
+                correo: userData.correo || '',
+                edad: edad || '',
+                age: age
+            });
+        }
+        catch (error) {
+            console.error('❌ Error obteniendo perfil:', error.message);
+            res.status(500).json({ error: 'Error al obtener perfil' });
         }
     }
     async updateUser(req, res) {
         console.log('🟢 [UPDATE USER] Solicitud de actualización recibida.');
         const token = req.headers.authorization?.split(' ')[1];
         if (!token) {
-            console.warn('⚠️ Token no proporcionado en cabecera Authorization.');
             return res.status(401).json({ error: 'Token requerido' });
         }
         try {
-            console.log('🔹 Obteniendo usuario desde el token...');
             const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
             if (userError || !user) {
-                console.error('❌ No se pudo obtener usuario con el token.');
                 return res.status(401).json({ error: 'Token inválido o expirado' });
             }
             const normalizedData = this.normalizeUserData(req.body);
@@ -185,7 +261,7 @@ class AuthController {
             if (correo !== undefined)
                 userUpdates.correo = correo;
             if (edad !== undefined)
-                userUpdates.edad = new Date(edad).toISOString();
+                userUpdates.edad = new Date(edad).toISOString().split('T')[0];
             if (Object.keys(userUpdates).length > 0) {
                 const { data: userData, error: userUpdateError } = await supabase_1.supabase
                     .from('Usuario')
@@ -227,8 +303,8 @@ class AuthController {
                 await (0, emailService_1.sendRecoveryEmail)(correo, resetToken);
             }
             else {
-                console.warn('⚠️ Servicio de email no disponible, usando consola:');
-                console.log(`🔗 Link de recuperación: ${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`);
+                console.warn('⚠️ Servicio de email no disponible');
+                console.log(`🔗 Token de recuperación: ${resetToken}`);
             }
             console.log('✅ Correo de recuperación enviado correctamente.');
             res.json({
@@ -256,8 +332,12 @@ class AuthController {
                 .from('Usuario')
                 .select('id_usuario, correo')
                 .eq('correo', correo)
-                .single();
-            if (userError || !userData) {
+                .maybeSingle();
+            if (userError && userError.code !== 'PGRST116') {
+                console.error('❌ Error buscando usuario:', userError.message);
+                return res.status(500).json({ error: 'Error interno del servidor' });
+            }
+            if (!userData) {
                 console.warn('⚠️ Usuario no encontrado en la base de datos.');
                 return res.status(404).json({ error: 'Usuario no encontrado' });
             }
@@ -317,42 +397,6 @@ class AuthController {
         catch (error) {
             console.error('❌ Error en delete-account:', error.message);
             res.status(500).json({ error: 'Error interno del servidor' });
-        }
-    }
-    async getUserProfile(req, res) {
-        console.log('🟢 [GET USER PROFILE] Solicitud recibida');
-        const token = req.headers.authorization?.split(' ')[1];
-        if (!token) {
-            return res.status(401).json({ error: 'Token requerido' });
-        }
-        try {
-            const { data: { user }, error } = await supabase_1.supabase.auth.getUser(token);
-            if (error || !user) {
-                return res.status(401).json({ error: 'Token inválido o expirado' });
-            }
-            const { data: userData, error: userError } = await supabase_1.supabase
-                .from('Usuario')
-                .select('*')
-                .eq('id_usuario', user.id)
-                .single();
-            if (userError) {
-                console.error('❌ Error obteniendo datos de tabla Usuario:', userError.message);
-                return res.status(404).json({ error: 'Usuario no encontrado en la base de datos' });
-            }
-            const edad = userData?.edad;
-            const age = edad ? this.calculateAge(edad) : null;
-            res.json({
-                id: userData.id_usuario,
-                nombre: userData.nombre || '',
-                apellido: userData.apellido || '',
-                correo: userData.correo || '',
-                edad: edad || '',
-                age: age
-            });
-        }
-        catch (error) {
-            console.error('❌ Error obteniendo perfil:', error.message);
-            res.status(500).json({ error: 'Error al obtener perfil' });
         }
     }
 }

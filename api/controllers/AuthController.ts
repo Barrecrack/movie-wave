@@ -42,29 +42,38 @@ class AuthController {
       correo: body.correo || body.email,
       contrasena: body.contrasena || body.password,
       edad: body.edad || body.birthdate,
-      
-      // Campos en inglés (backward compatibility)
-      name: body.name || body.nombre,
-      lastname: body.lastname || body.apellido,
-      email: body.email || body.correo,
-      password: body.password || body.contrasena,
-      birthdate: body.birthdate || body.edad
     };
   }
 
   /**
+   * Verifica si un usuario ya existe en la tabla Usuario
+   */
+  private async checkUserExists(correo: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('Usuario')
+        .select('id_usuario')
+        .eq('correo', correo)
+        .maybeSingle(); // Usar maybeSingle en lugar de single
+
+      if (error) {
+        console.error('❌ Error verificando usuario existente:', error.message);
+        return false;
+      }
+
+      return !!data;
+    } catch (error) {
+      console.error('❌ Error en checkUserExists:', error);
+      return false;
+    }
+  }
+
+  /**
    * Registers a new user in Supabase and creates entry in Usuario table.
-   * 
-   * @async
-   * @function register
-   * @param {Request} req - Express request object containing user data.
-   * @param {Response} res - Express response object.
-   * @returns {Promise<void>} Responds with the created user or an error message.
    */
   async register(req: Request, res: Response) {
     console.log('🟢 [REGISTER] Solicitud recibida con body:', req.body);
     
-    // Normalizar datos (acepta inglés y español)
     const normalizedData = this.normalizeUserData(req.body);
     const { nombre, apellido, correo, contrasena, edad } = normalizedData;
 
@@ -73,6 +82,14 @@ class AuthController {
       if (!correo || !contrasena || !nombre || !apellido) {
         return res.status(400).json({ 
           error: 'Correo/email, contraseña/password, nombre/name y apellido/lastname son requeridos' 
+        });
+      }
+
+      // Verificar si el usuario ya existe en la tabla Usuario
+      const userExists = await this.checkUserExists(correo);
+      if (userExists) {
+        return res.status(400).json({ 
+          error: 'Ya existe un usuario registrado con este correo electrónico' 
         });
       }
 
@@ -108,12 +125,12 @@ class AuthController {
         .from('Usuario')
         .insert([
           {
-            id_usuario: authData.user.id, // Mismo ID que Auth
+            id_usuario: authData.user.id,
             nombre,
             apellido,
             correo,
-            contrasena: contrasena,
-            edad: edad ? new Date(edad).toISOString() : null
+            contrasena: contrasena, // Solo como backup, Auth maneja la autenticación
+            edad: edad ? new Date(edad).toISOString().split('T')[0] : null // Solo la fecha, sin hora
           }
         ])
         .select()
@@ -122,11 +139,16 @@ class AuthController {
       if (userError) {
         console.error('❌ Error creando usuario en tabla Usuario:', userError.message);
         
-        // Si falla la creación en la tabla, no podemos eliminar el usuario de Auth desde el cliente
-        console.warn('⚠️ Usuario creado en Auth pero no en tabla Usuario. Se requiere limpieza manual.');
+        // Intentar limpiar el usuario de Auth si falla la creación en la tabla
+        try {
+          // En producción necesitarías una función edge para esto
+          console.warn('⚠️ Usuario creado en Auth pero no en tabla Usuario. ID:', authData.user.id);
+        } catch (cleanupError) {
+          console.error('⚠️ No se pudo limpiar usuario de Auth:', cleanupError);
+        }
         
         return res.status(400).json({ 
-          error: 'Usuario creado en autenticación pero error en base de datos. Contacte soporte.' 
+          error: 'Error al completar el registro. Por favor, contacte soporte.' 
         });
       }
 
@@ -153,17 +175,10 @@ class AuthController {
 
   /**
    * Logs in a user with email and password credentials.
-   * 
-   * @async
-   * @function login
-   * @param {Request} req - Express request containing user credentials.
-   * @param {Response} res - Express response object.
-   * @returns {Promise<void>} Returns the authenticated user, session, and JWT tokens.
    */
   async login(req: Request, res: Response) {
     console.log('🟢 [LOGIN] Intento de inicio de sesión con body:', req.body);
     
-    // Normalizar datos
     const normalizedData = this.normalizeUserData(req.body);
     const { correo, contrasena } = normalizedData;
 
@@ -178,29 +193,41 @@ class AuthController {
         password: contrasena 
       });
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error de autenticación:', error.message);
+        return res.status(401).json({ error: 'Credenciales inválidas' });
+      }
 
       // Obtener datos adicionales del usuario desde la tabla Usuario
       const { data: userData, error: userError } = await supabase
         .from('Usuario')
         .select('*')
         .eq('id_usuario', data.user.id)
-        .single();
+        .maybeSingle(); // Cambiar a maybeSingle para evitar error de múltiples resultados
 
-      if (userError) {
+      if (userError && userError.code !== 'PGRST116') { // PGRST116 = no rows
         console.error('❌ Error obteniendo datos del usuario:', userError.message);
       }
 
       console.log('✅ Login exitoso para:', data.user.email);
 
+      // Si no hay datos en la tabla Usuario, usar datos de Auth como fallback
+      const userProfile = userData || {
+        id_usuario: data.user.id,
+        nombre: data.user.user_metadata?.nombre || '',
+        apellido: data.user.user_metadata?.apellido || '',
+        correo: data.user.email || '',
+        edad: data.user.user_metadata?.edad || null
+      };
+
       res.json({
         message: 'Login exitoso',
         user: {
-          id: data.user.id,
-          nombre: userData?.nombre || data.user.user_metadata?.nombre,
-          apellido: userData?.apellido || data.user.user_metadata?.apellido,
-          correo: data.user.email,
-          edad: userData?.edad
+          id: userProfile.id_usuario,
+          nombre: userProfile.nombre,
+          apellido: userProfile.apellido,
+          correo: userProfile.correo,
+          edad: userProfile.edad
         },
         session: data.session,
         token: data.session?.access_token,
@@ -208,44 +235,92 @@ class AuthController {
       });
     } catch (error: any) {
       console.error('❌ Error en login:', error.message);
-      
-      if (error.message.includes('Invalid login credentials')) {
-        return res.status(401).json({ error: 'Credenciales inválidas' });
-      }
-      
       res.status(500).json({ error: 'Error al iniciar sesión' });
     }
   }
 
   /**
+   * Retrieves the authenticated user's profile data.
+   */
+  async getUserProfile(req: Request, res: Response) {
+    console.log('🟢 [GET USER PROFILE] Solicitud recibida');
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ error: 'Token requerido' });
+    }
+
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+
+      if (error || !user) {
+        return res.status(401).json({ error: 'Token inválido o expirado' });
+      }
+
+      // Obtener datos del usuario desde tabla Usuario
+      const { data: userData, error: userError } = await supabase
+        .from('Usuario')
+        .select('*')
+        .eq('id_usuario', user.id)
+        .maybeSingle(); // Cambiar a maybeSingle
+
+      if (userError && userError.code !== 'PGRST116') {
+        console.error('❌ Error obteniendo datos de tabla Usuario:', userError.message);
+        return res.status(500).json({ error: 'Error al obtener perfil' });
+      }
+
+      // Si no se encuentra en la tabla Usuario, usar datos de Auth
+      if (!userData) {
+        console.warn('⚠️ Usuario no encontrado en tabla Usuario, usando datos de Auth');
+        
+        const edad = user.user_metadata?.edad;
+        const age = edad ? this.calculateAge(edad) : null;
+
+        return res.json({
+          id: user.id,
+          nombre: user.user_metadata?.nombre || '',
+          apellido: user.user_metadata?.apellido || '',
+          correo: user.email || '',
+          edad: edad || '',
+          age: age
+        });
+      }
+
+      const edad = userData?.edad;
+      const age = edad ? this.calculateAge(edad) : null;
+
+      res.json({
+        id: userData.id_usuario,
+        nombre: userData.nombre || '',
+        apellido: userData.apellido || '',
+        correo: userData.correo || '',
+        edad: edad || '',
+        age: age
+      });
+    } catch (error: any) {
+      console.error('❌ Error obteniendo perfil:', error.message);
+      res.status(500).json({ error: 'Error al obtener perfil' });
+    }
+  }
+
+  /**
    * Updates user information.
-   * Requires a valid authentication token.
-   * 
-   * @async
-   * @function updateUser
-   * @param {Request} req - Express request containing the token and updated user data.
-   * @param {Response} res - Express response object.
-   * @returns {Promise<void>} Returns the updated user data or an error message.
    */
   async updateUser(req: Request, res: Response) {
     console.log('🟢 [UPDATE USER] Solicitud de actualización recibida.');
     const token = req.headers.authorization?.split(' ')[1];
 
     if (!token) {
-      console.warn('⚠️ Token no proporcionado en cabecera Authorization.');
       return res.status(401).json({ error: 'Token requerido' });
     }
 
     try {
-      console.log('🔹 Obteniendo usuario desde el token...');
       const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
       if (userError || !user) {
-        console.error('❌ No se pudo obtener usuario con el token.');
         return res.status(401).json({ error: 'Token inválido o expirado' });
       }
 
-      // Normalizar datos del body
       const normalizedData = this.normalizeUserData(req.body);
       const { nombre, apellido, correo, edad } = normalizedData;
 
@@ -267,7 +342,7 @@ class AuthController {
       if (nombre !== undefined) userUpdates.nombre = nombre;
       if (apellido !== undefined) userUpdates.apellido = apellido;
       if (correo !== undefined) userUpdates.correo = correo;
-      if (edad !== undefined) userUpdates.edad = new Date(edad).toISOString();
+      if (edad !== undefined) userUpdates.edad = new Date(edad).toISOString().split('T')[0];
 
       if (Object.keys(userUpdates).length > 0) {
         const { data: userData, error: userUpdateError } = await supabase
@@ -295,18 +370,11 @@ class AuthController {
   }
 
   /**
-   * Sends a password recovery email to the user using custom JWT implementation.
-   * 
-   * @async
-   * @function forgotPassword
-   * @param {Request} req - Express request containing the user's email.
-   * @param {Response} res - Express response object.
-   * @returns {Promise<void>} Returns a success message or an error.
+   * Sends a password recovery email.
    */
   async forgotPassword(req: Request, res: Response) {
     console.log('🟢 [FORGOT PASSWORD] Solicitud recibida para:', req.body);
     
-    // Normalizar datos
     const normalizedData = this.normalizeUserData(req.body);
     const { correo } = normalizedData;
 
@@ -322,18 +390,16 @@ class AuthController {
 
       console.log('🔹 Enviando correo de recuperación...');
       
-      // Usar tu servicio de email personalizado
       if (sendRecoveryEmail) {
         await sendRecoveryEmail(correo, resetToken);
       } else {
-        console.warn('⚠️ Servicio de email no disponible, usando consola:');
-        console.log(`🔗 Link de recuperación: ${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`);
+        console.warn('⚠️ Servicio de email no disponible');
+        console.log(`🔗 Token de recuperación: ${resetToken}`);
       }
 
       console.log('✅ Correo de recuperación enviado correctamente.');
       res.json({ 
         message: 'Correo de recuperación enviado',
-        // En desarrollo, puedes retornar el token para testing
         ...(process.env.NODE_ENV === 'development' && { token: resetToken })
       });
     } catch (error: any) {
@@ -343,13 +409,7 @@ class AuthController {
   }
 
   /**
-   * Resets the user's password using a valid JWT token.
-   * 
-   * @async
-   * @function resetPassword
-   * @param {Request} req - Express request containing the token and new password.
-   * @param {Response} res - Express response object.
-   * @returns {Promise<void>} Returns success or error messages.
+   * Resets the user's password.
    */
   async resetPassword(req: Request, res: Response) {
     console.log('🟢 [RESET PASSWORD] Solicitud de reseteo recibida.');
@@ -370,9 +430,14 @@ class AuthController {
         .from('Usuario')
         .select('id_usuario, correo')
         .eq('correo', correo)
-        .single();
+        .maybeSingle();
 
-      if (userError || !userData) {
+      if (userError && userError.code !== 'PGRST116') {
+        console.error('❌ Error buscando usuario:', userError.message);
+        return res.status(500).json({ error: 'Error interno del servidor' });
+      }
+
+      if (!userData) {
         console.warn('⚠️ Usuario no encontrado en la base de datos.');
         return res.status(404).json({ error: 'Usuario no encontrado' });
       }
@@ -404,13 +469,7 @@ class AuthController {
   }
 
   /**
-   * Deletes the authenticated user's account from both Auth and Usuario table.
-   * 
-   * @async
-   * @function deleteAccount
-   * @param {Request} req - Express request containing the authorization token.
-   * @param {Response} res - Express response object.
-   * @returns {Promise<void>} Returns success or error message.
+   * Deletes the authenticated user's account.
    */
   async deleteAccount(req: Request, res: Response) {
     console.log('🟢 [DELETE ACCOUNT] Solicitud de eliminación de cuenta recibida');
@@ -421,7 +480,6 @@ class AuthController {
     }
 
     try {
-      // Verificar el usuario desde el token
       const { data: { user }, error: userError } = await supabase.auth.getUser(token);
       if (userError || !user) {
         return res.status(401).json({ error: 'Token inválido o expirado' });
@@ -429,7 +487,7 @@ class AuthController {
 
       console.log('🔹 Eliminando usuario de tabla Usuario:', user.email);
 
-      // Eliminar de tabla Usuario primero
+      // Eliminar de tabla Usuario
       const { error: deleteError } = await supabase
         .from('Usuario')
         .delete()
@@ -440,8 +498,7 @@ class AuthController {
         return res.status(500).json({ error: 'Error eliminando cuenta' });
       }
 
-      // Para eliminar completamente de Auth se necesita función edge o admin
-      // Por ahora, desactivamos la cuenta cambiando el email
+      // Desactivar cuenta en Auth cambiando el email
       console.log('🔹 Desactivando cuenta en Auth...');
       const deletedEmail = `deleted_${Date.now()}@deleted.account`;
       const { error: authUpdateError } = await supabase.auth.updateUser({
@@ -462,59 +519,6 @@ class AuthController {
     } catch (error: any) {
       console.error('❌ Error en delete-account:', error.message);
       res.status(500).json({ error: 'Error interno del servidor' });
-    }
-  }
-
-  /**
-   * Retrieves the authenticated user's profile data using the provided token.
-   * 
-   * @async
-   * @function getUserProfile
-   * @param {Request} req - Express request containing the authorization token.
-   * @param {Response} res - Express response object.
-   * @returns {Promise<void>} Returns the user's profile data or an error message.
-   */
-  async getUserProfile(req: Request, res: Response) {
-    console.log('🟢 [GET USER PROFILE] Solicitud recibida');
-    const token = req.headers.authorization?.split(' ')[1];
-
-    if (!token) {
-      return res.status(401).json({ error: 'Token requerido' });
-    }
-
-    try {
-      const { data: { user }, error } = await supabase.auth.getUser(token);
-
-      if (error || !user) {
-        return res.status(401).json({ error: 'Token inválido o expirado' });
-      }
-
-      // Obtener datos completos del usuario desde tabla Usuario
-      const { data: userData, error: userError } = await supabase
-        .from('Usuario')
-        .select('*')
-        .eq('id_usuario', user.id)
-        .single();
-
-      if (userError) {
-        console.error('❌ Error obteniendo datos de tabla Usuario:', userError.message);
-        return res.status(404).json({ error: 'Usuario no encontrado en la base de datos' });
-      }
-
-      const edad = userData?.edad;
-      const age = edad ? this.calculateAge(edad) : null;
-
-      res.json({
-        id: userData.id_usuario,
-        nombre: userData.nombre || '',
-        apellido: userData.apellido || '',
-        correo: userData.correo || '',
-        edad: edad || '',
-        age: age
-      });
-    } catch (error: any) {
-      console.error('❌ Error obteniendo perfil:', error.message);
-      res.status(500).json({ error: 'Error al obtener perfil' });
     }
   }
 }
