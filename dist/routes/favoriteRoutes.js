@@ -170,8 +170,8 @@ router.get('/my-favorites', async (req, res) => {
           duracion,
           tipo,
           fecha,
-          calificacion,
-          genero,
+          calificacion
+      
         )
       `)
             .eq('id_usuario', userId);
