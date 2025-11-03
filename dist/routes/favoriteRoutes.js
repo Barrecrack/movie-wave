@@ -6,33 +6,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const supabase_1 = require("../config/supabase");
 const router = express_1.default.Router();
-async function getUserIdNumerico(token) {
+async function getUserIdFromAuth(token) {
     try {
-        console.log('🔍 Buscando ID numérico del usuario...');
+        console.log('🔍 Buscando usuario autenticado...');
         const { data: { user }, error: authError } = await supabase_1.supabase.auth.getUser(token);
         if (authError || !user) {
             console.error('❌ Error obteniendo usuario de Auth:', authError?.message);
             return null;
         }
-        console.log('📧 Email del usuario Auth:', user.email);
-        const { data, error } = await supabase_1.supabase
-            .from('Usuario')
-            .select('id_usuario')
-            .eq('correo', user.email)
-            .single();
-        if (error) {
-            console.error('❌ Error buscando en tabla Usuario:', error.message);
-            return null;
-        }
-        if (!data) {
-            console.error('❌ Usuario no encontrado en tabla Usuario con email:', user.email);
-            return null;
-        }
-        console.log(`✅ ID numérico encontrado: ${data.id_usuario}`);
-        return data.id_usuario;
+        console.log('✅ Usuario Auth encontrado:', user.id);
+        return user.id;
     }
     catch (error) {
-        console.error('❌ Error en getUserIdNumerico:', error.message);
+        console.error('❌ Error en getUserIdFromAuth:', error.message);
         return null;
     }
 }
@@ -42,20 +28,26 @@ router.get('/my-favorites', async (req, res) => {
         return res.status(401).json({ error: 'Token requerido' });
     }
     try {
-        const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
-        if (userError || !user) {
+        const userId = await getUserIdFromAuth(token);
+        if (!userId) {
             return res.status(401).json({ error: 'Token inválido' });
         }
-        console.log('🟢 [GET FAVORITES] Obteniendo favoritos para usuario:', user.id);
-        const userIdNum = await getUserIdNumerico(token);
-        if (!userIdNum) {
-            return res.status(404).json({ error: 'Usuario no encontrado en la base de datos' });
-        }
-        console.log('🔹 Ejecutando consulta Supabase...');
+        console.log('🟢 [GET FAVORITES] Obteniendo favoritos para usuario:', userId);
         const { data, error } = await supabase_1.supabase
             .from('Favoritos')
-            .select('*')
-            .eq('id_usuario', userIdNum);
+            .select(`
+        *,
+        Contenido (
+          id_contenido,
+          titulo,
+          descripcion,
+          duracion,
+          tipo,
+          fecha,
+          calificacion
+        )
+      `)
+            .eq('id_usuario', userId);
         if (error) {
             console.error('❌ ERROR SUPABASE DETALLADO:', error);
             throw error;
@@ -78,24 +70,19 @@ router.post('/', async (req, res) => {
         return res.status(401).json({ error: 'Token requerido' });
     }
     try {
-        const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
-        if (userError || !user) {
+        const userId = await getUserIdFromAuth(token);
+        if (!userId) {
             return res.status(401).json({ error: 'Token inválido' });
         }
-        const userIdNum = await getUserIdNumerico(token);
-        if (!userIdNum) {
-            return res.status(404).json({ error: 'Usuario no encontrado en la base de datos' });
-        }
         const { id_contenido } = req.body;
-        const idContenidoNum = parseInt(id_contenido);
-        if (isNaN(idContenidoNum)) {
-            return res.status(400).json({ error: 'ID de contenido inválido' });
+        if (!id_contenido) {
+            return res.status(400).json({ error: 'ID de contenido requerido' });
         }
         const { data: existing } = await supabase_1.supabase
             .from('Favoritos')
             .select('*')
-            .eq('id_usuario', userIdNum)
-            .eq('id_contenido', idContenidoNum)
+            .eq('id_usuario', userId)
+            .eq('id_contenido', id_contenido)
             .single();
         if (existing) {
             console.log('⚠️ Ya existe en favoritos');
@@ -106,8 +93,8 @@ router.post('/', async (req, res) => {
             .insert([
             {
                 id_favorito: generateUUID(),
-                id_usuario: userIdNum,
-                id_contenido: idContenidoNum,
+                id_usuario: userId,
+                id_contenido: id_contenido,
                 fecha_agregado: new Date().toISOString().split('T')[0]
             }
         ])
@@ -130,25 +117,21 @@ router.delete('/:contentId', async (req, res) => {
         return res.status(401).json({ error: 'Token requerido' });
     }
     try {
-        const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
-        if (userError || !user) {
+        const userId = await getUserIdFromAuth(token);
+        if (!userId) {
             return res.status(401).json({ error: 'Token inválido' });
         }
         console.log('🟢 [DELETE FAVORITE] Eliminando favorito:', req.params);
-        const userIdNum = await getUserIdNumerico(token);
-        if (!userIdNum) {
-            return res.status(404).json({ error: 'Usuario no encontrado' });
-        }
-        const contentIdNum = parseInt(req.params.contentId);
-        if (isNaN(contentIdNum)) {
-            return res.status(400).json({ error: 'ID de contenido inválido' });
+        const contentId = req.params.contentId;
+        if (!contentId) {
+            return res.status(400).json({ error: 'ID de contenido requerido' });
         }
         console.log('🔹 Ejecutando DELETE en Supabase...');
         const { error } = await supabase_1.supabase
             .from('Favoritos')
             .delete()
-            .eq('id_usuario', userIdNum)
-            .eq('id_contenido', contentIdNum);
+            .eq('id_usuario', userId)
+            .eq('id_contenido', contentId);
         if (error) {
             console.error('❌ ERROR SUPABASE DETALLADO (DELETE):', error);
             throw error;
@@ -170,24 +153,20 @@ router.get('/check/:contentId', async (req, res) => {
         return res.status(401).json({ error: 'Token requerido' });
     }
     try {
-        const { data: { user }, error: userError } = await supabase_1.supabase.auth.getUser(token);
-        if (userError || !user) {
+        const userId = await getUserIdFromAuth(token);
+        if (!userId) {
             return res.status(401).json({ error: 'Token inválido' });
         }
         console.log('🟢 [CHECK FAVORITE] Verificando favorito:', req.params);
-        const userIdNum = await getUserIdNumerico(token);
-        if (!userIdNum) {
-            return res.status(404).json({ error: 'Usuario no encontrado' });
-        }
-        const contentIdNum = parseInt(req.params.contentId);
-        if (isNaN(contentIdNum)) {
-            return res.status(400).json({ error: 'ID de contenido inválido' });
+        const contentId = req.params.contentId;
+        if (!contentId) {
+            return res.status(400).json({ error: 'ID de contenido requerido' });
         }
         const { data, error } = await supabase_1.supabase
             .from('Favoritos')
             .select('*')
-            .eq('id_usuario', userIdNum)
-            .eq('id_contenido', contentIdNum)
+            .eq('id_usuario', userId)
+            .eq('id_contenido', contentId)
             .single();
         if (error && error.code !== 'PGRST116')
             throw error;
