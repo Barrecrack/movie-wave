@@ -4,12 +4,11 @@ import { Request, Response } from 'express';
 
 const router = express.Router();
 
-// 🔥 FUNCIÓN CORREGIDA PARA OBTENER ID NUMÉRICO DEL USUARIO
-async function getUserIdNumerico(token: string): Promise<number | null> {
+// 🔥 FUNCIÓN CORREGIDA PARA OBTENER UUID DEL USUARIO
+async function getUserIdFromAuth(token: string): Promise<string | null> {
   try {
-    console.log('🔍 Buscando ID numérico del usuario...');
+    console.log('🔍 Buscando usuario autenticado...');
     
-    // Usar el token para obtener el usuario de Supabase Auth
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
     if (authError || !user) {
@@ -17,35 +16,17 @@ async function getUserIdNumerico(token: string): Promise<number | null> {
       return null;
     }
 
-    console.log('📧 Email del usuario Auth:', user.email);
-    
-    // Buscar en tabla Usuario por email
-    const { data, error } = await supabase
-      .from('Usuario')
-      .select('id_usuario')
-      .eq('correo', user.email)
-      .single();
-
-    if (error) {
-      console.error('❌ Error buscando en tabla Usuario:', error.message);
-      return null;
-    }
-
-    if (!data) {
-      console.error('❌ Usuario no encontrado en tabla Usuario con email:', user.email);
-      return null;
-    }
-
-    console.log(`✅ ID numérico encontrado: ${data.id_usuario}`);
-    return data.id_usuario;
+    console.log('✅ Usuario Auth encontrado:', user.id);
+    return user.id;
   } catch (error: any) {
-    console.error('❌ Error en getUserIdNumerico:', error.message);
+    console.error('❌ Error en getUserIdFromAuth:', error.message);
     return null;
   }
 }
 
 /**
  * @route GET /my-favorites
+ * @description Obtiene todos los favoritos del usuario autenticado
  */
 router.get('/my-favorites', async (req: Request, res: Response) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -54,24 +35,28 @@ router.get('/my-favorites', async (req: Request, res: Response) => {
   }
 
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !user) {
+    const userId = await getUserIdFromAuth(token);
+    if (!userId) {
       return res.status(401).json({ error: 'Token inválido' });
     }
 
-    console.log('🟢 [GET FAVORITES] Obteniendo favoritos para usuario:', user.id);
+    console.log('🟢 [GET FAVORITES] Obteniendo favoritos para usuario:', userId);
     
-    // Obtener ID numérico
-    const userIdNum = await getUserIdNumerico(token);
-    if (!userIdNum) {
-      return res.status(404).json({ error: 'Usuario no encontrado en la base de datos' });
-    }
-
-    console.log('🔹 Ejecutando consulta Supabase...');
     const { data, error } = await supabase
       .from('Favoritos')
-      .select('*')
-      .eq('id_usuario', userIdNum);  // 🔥 Usar ID numérico
+      .select(`
+        *,
+        Contenido (
+          id_contenido,
+          titulo,
+          descripcion,
+          duracion,
+          tipo,
+          fecha,
+          calificacion
+        )
+      `)
+      .eq('id_usuario', userId);
 
     if (error) {
       console.error('❌ ERROR SUPABASE DETALLADO:', error);
@@ -91,6 +76,7 @@ router.get('/my-favorites', async (req: Request, res: Response) => {
 
 /**
  * @route POST /
+ * @description Agrega un contenido a favoritos
  */
 router.post('/', async (req: Request, res: Response) => {
   console.log('🟢 [ADD FAVORITE] Agregando favorito:', req.body);
@@ -101,29 +87,23 @@ router.post('/', async (req: Request, res: Response) => {
   }
 
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !user) {
+    const userId = await getUserIdFromAuth(token);
+    if (!userId) {
       return res.status(401).json({ error: 'Token inválido' });
     }
 
-    // Obtener ID numérico
-    const userIdNum = await getUserIdNumerico(token);
-    if (!userIdNum) {
-      return res.status(404).json({ error: 'Usuario no encontrado en la base de datos' });
-    }
-
     const { id_contenido } = req.body;
-    const idContenidoNum = parseInt(id_contenido);
-    if (isNaN(idContenidoNum)) {
-      return res.status(400).json({ error: 'ID de contenido inválido' });
+    
+    if (!id_contenido) {
+      return res.status(400).json({ error: 'ID de contenido requerido' });
     }
 
     // Verificar si ya existe
     const { data: existing } = await supabase
       .from('Favoritos')
       .select('*')
-      .eq('id_usuario', userIdNum)  // 🔥 Usar ID numérico
-      .eq('id_contenido', idContenidoNum)
+      .eq('id_usuario', userId)
+      .eq('id_contenido', id_contenido)
       .single();
 
     if (existing) {
@@ -137,8 +117,8 @@ router.post('/', async (req: Request, res: Response) => {
       .insert([
         {
           id_favorito: generateUUID(),
-          id_usuario: userIdNum,  // 🔥 ID numérico
-          id_contenido: idContenidoNum,
+          id_usuario: userId,
+          id_contenido: id_contenido,
           fecha_agregado: new Date().toISOString().split('T')[0]
         }
       ])
@@ -159,6 +139,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /**
  * @route DELETE /:contentId
+ * @description Elimina un contenido de favoritos
  */
 router.delete('/:contentId', async (req: Request, res: Response) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -167,31 +148,24 @@ router.delete('/:contentId', async (req: Request, res: Response) => {
   }
 
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !user) {
+    const userId = await getUserIdFromAuth(token);
+    if (!userId) {
       return res.status(401).json({ error: 'Token inválido' });
     }
 
     console.log('🟢 [DELETE FAVORITE] Eliminando favorito:', req.params);
     
-    // Obtener ID numérico
-    const userIdNum = await getUserIdNumerico(token);
-    if (!userIdNum) {
-      return res.status(404).json({ error: 'Usuario no encontrado' });
-    }
-
-    // Convertir contentId a número
-    const contentIdNum = parseInt(req.params.contentId);
-    if (isNaN(contentIdNum)) {
-      return res.status(400).json({ error: 'ID de contenido inválido' });
+    const contentId = req.params.contentId;
+    if (!contentId) {
+      return res.status(400).json({ error: 'ID de contenido requerido' });
     }
 
     console.log('🔹 Ejecutando DELETE en Supabase...');
     const { error } = await supabase
       .from('Favoritos')
       .delete()
-      .eq('id_usuario', userIdNum)  // 🔥 Usar ID numérico
-      .eq('id_contenido', contentIdNum);
+      .eq('id_usuario', userId)
+      .eq('id_contenido', contentId);
 
     if (error) {
       console.error('❌ ERROR SUPABASE DETALLADO (DELETE):', error);
@@ -211,6 +185,7 @@ router.delete('/:contentId', async (req: Request, res: Response) => {
 
 /**
  * @route GET /check/:contentId
+ * @description Verifica si un contenido está en favoritos
  */
 router.get('/check/:contentId', async (req: Request, res: Response) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -219,30 +194,23 @@ router.get('/check/:contentId', async (req: Request, res: Response) => {
   }
 
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !user) {
+    const userId = await getUserIdFromAuth(token);
+    if (!userId) {
       return res.status(401).json({ error: 'Token inválido' });
     }
 
     console.log('🟢 [CHECK FAVORITE] Verificando favorito:', req.params);
     
-    // Obtener ID numérico
-    const userIdNum = await getUserIdNumerico(token);
-    if (!userIdNum) {
-      return res.status(404).json({ error: 'Usuario no encontrado' });
-    }
-
-    // Convertir contentId a número
-    const contentIdNum = parseInt(req.params.contentId);
-    if (isNaN(contentIdNum)) {
-      return res.status(400).json({ error: 'ID de contenido inválido' });
+    const contentId = req.params.contentId;
+    if (!contentId) {
+      return res.status(400).json({ error: 'ID de contenido requerido' });
     }
 
     const { data, error } = await supabase
       .from('Favoritos')
       .select('*')
-      .eq('id_usuario', userIdNum)  // 🔥 Usar ID numérico
-      .eq('id_contenido', contentIdNum)
+      .eq('id_usuario', userId)
+      .eq('id_contenido', contentId)
       .single();
 
     if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found

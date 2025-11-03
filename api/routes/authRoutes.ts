@@ -16,10 +16,11 @@ const router = express.Router();
  * @description Registers a new user in the system.
  * @access Public
  * 
- * @param {string} req.body.name - User's first name.
- * @param {string} req.body.lastname - User's last name.
- * @param {string} req.body.email - Unique user email.
- * @param {string} req.body.password - User's password.
+ * @param {string} req.body.nombre - User's first name.
+ * @param {string} req.body.apellido - User's last name.
+ * @param {string} req.body.correo - Unique user email.
+ * @param {string} req.body.contrasena - User's password.
+ * @param {string} req.body.edad - User's birth date.
  * 
  * @returns {Object} 201 - User successfully created.
  * @returns {Object} 400 - Validation error or user already exists.
@@ -34,8 +35,8 @@ router.post('/register', (req, res) => {
  * @description Logs in a user and returns a JWT authentication token.
  * @access Public
  * 
- * @param {string} req.body.email - User's email address.
- * @param {string} req.body.password - User's password.
+ * @param {string} req.body.correo - User's email address.
+ * @param {string} req.body.contrasena - User's password.
  * 
  * @returns {Object} 200 - JWT token and user information.
  * @returns {Object} 401 - Invalid credentials.
@@ -50,9 +51,10 @@ router.post('/login', (req, res) => {
  * @description Updates authenticated user's data.
  * @access Private
  * 
- * @param {string} [req.body.name] - Updated first name.
- * @param {string} [req.body.lastname] - Updated last name.
- * @param {string} [req.body.email] - Updated email.
+ * @param {string} [req.body.nombre] - Updated first name.
+ * @param {string} [req.body.apellido] - Updated last name.
+ * @param {string} [req.body.correo] - Updated email.
+ * @param {string} [req.body.edad] - Updated birth date.
  * 
  * @returns {Object} 200 - User successfully updated.
  * @returns {Object} 400 - Invalid data provided.
@@ -77,14 +79,12 @@ router.delete('/delete-account', (req, res) => {
   AuthController.deleteAccount(req, res);
 });
 
-
-
 /**
  * @route POST /forgot-password
  * @description Sends a password reset email with recovery instructions.
  * @access Public
  * 
- * @param {string} req.body.email - User's email to receive reset instructions.
+ * @param {string} req.body.correo - User's email to receive reset instructions.
  * 
  * @returns {Object} 200 - Password reset email sent.
  * @returns {Object} 404 - User not found.
