@@ -1,4 +1,4 @@
-/**
+/** 
  * @file authRoutes.js
  * @description Defines authentication-related routes such as register, login, update user,
  * password recovery, and user profile retrieval. Uses AuthController to handle business logic.
@@ -7,7 +7,7 @@
 import express from 'express';
 import AuthController from '../controllers/AuthController';
 
-console.log('🔹 Cargando rutas de autenticación...');
+console.log('🚀 [AuthRoutes] Inicializando rutas de autenticación...');
 
 const router = express.Router();
 
@@ -15,114 +15,86 @@ const router = express.Router();
  * @route POST /register
  * @description Registers a new user in the system.
  * @access Public
- * 
- * @param {string} req.body.nombre - User's first name.
- * @param {string} req.body.apellido - User's last name.
- * @param {string} req.body.correo - Unique user email.
- * @param {string} req.body.contrasena - User's password.
- * @param {string} req.body.edad - User's birth date.
- * 
- * @returns {Object} 201 - User successfully created.
- * @returns {Object} 400 - Validation error or user already exists.
  */
 router.post('/register', (req, res) => {
-  console.log('➡️ [POST] /register');
-  AuthController.register(req, res);
+  console.log('➡️ [POST] /register | Datos recibidos:', req.body);
+  AuthController.register(req, res)
+    .then(() => console.log('✅ [POST] /register | Registro completado.'))
+    .catch(err => console.error('❌ [POST] /register | Error en registro:', err.message));
 });
 
 /**
  * @route POST /login
  * @description Logs in a user and returns a JWT authentication token.
  * @access Public
- * 
- * @param {string} req.body.correo - User's email address.
- * @param {string} req.body.contrasena - User's password.
- * 
- * @returns {Object} 200 - JWT token and user information.
- * @returns {Object} 401 - Invalid credentials.
  */
 router.post('/login', (req, res) => {
-  console.log('➡️ [POST] /login');
-  AuthController.login(req, res);
+  console.log('➡️ [POST] /login | Intento de inicio de sesión para:', req.body.correo);
+  AuthController.login(req, res)
+    .then(() => console.log('✅ [POST] /login | Inicio de sesión exitoso.'))
+    .catch(err => console.error('❌ [POST] /login | Error de autenticación:', err.message));
 });
 
 /**
  * @route PUT /update-user
  * @description Updates authenticated user's data.
  * @access Private
- * 
- * @param {string} [req.body.nombre] - Updated first name.
- * @param {string} [req.body.apellido] - Updated last name.
- * @param {string} [req.body.correo] - Updated email.
- * @param {string} [req.body.edad] - Updated birth date.
- * 
- * @returns {Object} 200 - User successfully updated.
- * @returns {Object} 400 - Invalid data provided.
- * @returns {Object} 401 - Unauthorized access.
  */
 router.put('/update-user', (req, res) => {
-  console.log('➡️ [PUT] /update-user');
-  AuthController.updateUser(req, res);
+  console.log('➡️ [PUT] /update-user | Datos de actualización:', req.body);
+  AuthController.updateUser(req, res)
+    .then(() => console.log('✅ [PUT] /update-user | Usuario actualizado correctamente.'))
+    .catch(err => console.error('❌ [PUT] /update-user | Error al actualizar usuario:', err.message));
 });
 
 /**
  * @route DELETE /delete-account
- * @description Permanently deletes the authenticated user's account
+ * @description Permanently deletes the authenticated user's account.
  * @access Private
- * 
- * @returns {Object} 200 - Success message
- * @returns {Object} 401 - Unauthorized or invalid token
- * @returns {Object} 500 - Server error
  */
 router.delete('/delete-account', (req, res) => {
-  console.log('➡️ [DELETE] /delete-account');
-  AuthController.deleteAccount(req, res);
+  console.log('➡️ [DELETE] /delete-account | Solicitud de eliminación de cuenta.');
+  AuthController.deleteAccount(req, res)
+    .then(() => console.log('✅ [DELETE] /delete-account | Cuenta eliminada correctamente.'))
+    .catch(err => console.error('❌ [DELETE] /delete-account | Error al eliminar cuenta:', err.message));
 });
 
 /**
  * @route POST /forgot-password
  * @description Sends a password reset email with recovery instructions.
  * @access Public
- * 
- * @param {string} req.body.correo - User's email to receive reset instructions.
- * 
- * @returns {Object} 200 - Password reset email sent.
- * @returns {Object} 404 - User not found.
  */
 router.post('/forgot-password', (req, res) => {
-  console.log('➡️ [POST] /forgot-password');
-  AuthController.forgotPassword(req, res);
+  console.log('➡️ [POST] /forgot-password | Solicitud de recuperación para:', req.body.correo);
+  AuthController.forgotPassword(req, res)
+    .then(() => console.log('✅ [POST] /forgot-password | Correo de recuperación enviado.'))
+    .catch(err => console.error('❌ [POST] /forgot-password | Error al enviar correo:', err.message));
 });
 
 /**
  * @route POST /reset-password
  * @description Resets a user's password using a valid token.
  * @access Public
- * 
- * @param {string} req.body.token - Password reset token.
- * @param {string} req.body.newPassword - New password for the account.
- * 
- * @returns {Object} 200 - Password successfully updated.
- * @returns {Object} 400 - Invalid or expired token.
  */
 router.post('/reset-password', (req, res) => {
-  console.log('➡️ [POST] /reset-password');
-  AuthController.resetPassword(req, res);
+  console.log('➡️ [POST] /reset-password | Token recibido:', req.body.token ? '✅' : '❌ Ninguno');
+  AuthController.resetPassword(req, res)
+    .then(() => console.log('✅ [POST] /reset-password | Contraseña restablecida.'))
+    .catch(err => console.error('❌ [POST] /reset-password | Error al restablecer contraseña:', err.message));
 });
 
 /**
  * @route GET /user-profile
  * @description Retrieves the profile information of the authenticated user.
  * @access Private
- * 
- * @returns {Object} 200 - Authenticated user's profile data.
- * @returns {Object} 401 - Unauthorized or invalid token.
  */
 router.get('/user-profile', (req, res) => {
-  console.log('➡️ [GET] /user-profile');
-  AuthController.getUserProfile(req, res);
+  console.log('➡️ [GET] /user-profile | Solicitando perfil de usuario autenticado...');
+  AuthController.getUserProfile(req, res)
+    .then(() => console.log('✅ [GET] /user-profile | Perfil de usuario obtenido.'))
+    .catch(err => console.error('❌ [GET] /user-profile | Error al obtener perfil:', err.message));
 });
 
-console.log('✅ Rutas de autenticación cargadas correctamente.');
+console.log('✅ [AuthRoutes] Rutas de autenticación cargadas correctamente.');
 
 export default router;

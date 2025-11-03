@@ -1,6 +1,8 @@
 import express from "express";
 import dotenv from "dotenv";
 
+console.log("🚀 [VideoRoutes] Inicializando rutas de videos...");
+
 dotenv.config();
 const router = express.Router();
 
@@ -8,24 +10,24 @@ const router = express.Router();
  * @route GET /search
  * @description Fetches videos from the Pexels API based on a user query or returns popular genres if no query is provided.
  * @access Public
- * @example
- * // Example request: GET /videos/search?query=mountains
- * @returns {Object[]} Array of formatted video objects with id, title, genre, year, poster, and videoUrl.
  */
 router.get("/search", async (req, res) => {
+  const startTime = Date.now();
+  console.log("➡️ [GET] /videos/search | Petición recibida con query:", req.query.query || "(sin query)");
+
   try {
     const query = (req.query.query as string)?.trim().toLowerCase() || "popular";
     const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
 
-    // 🔹 Validate that the API key exists
+    // 🔹 Validación de API Key
     if (!PEXELS_API_KEY) {
-      console.error("❌ PEXELS_API_KEY no configurada");
+      console.error("❌ [GET] /videos/search | PEXELS_API_KEY no configurada");
       return res.status(500).json({ error: "Configuración del servidor incompleta" });
     }
 
-    console.log(`🔍 Buscando videos: "${query}"`);
+    console.log(`🔍 [GET] /videos/search | Buscando videos para: "${query}"`);
 
-    // 🔹 If the user searches for something specific, we use only that term.
+    // 🔹 Si el usuario busca algo específico
     if (query !== "popular") {
       const response = await fetch(
         `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=12`,
@@ -38,12 +40,12 @@ router.get("/search", async (req, res) => {
       );
 
       if (!response.ok) {
-        console.error(`❌ Error Pexels API: ${response.status} - ${response.statusText}`);
+        console.error(`❌ [PEXELS] Error ${response.status}: ${response.statusText}`);
         throw new Error(`Error al obtener videos de Pexels (${response.status})`);
       }
 
       const data = await response.json();
-      console.log(`✅ Encontrados ${data.videos?.length || 0} videos para "${query}"`);
+      console.log(`✅ [PEXELS] ${data.videos?.length || 0} resultados encontrados para "${query}"`);
 
       const formatted = data.videos.map((v: any) => ({
         id: v.id,
@@ -54,13 +56,14 @@ router.get("/search", async (req, res) => {
         videoUrl: v.video_files?.[0]?.link || null,
       }));
 
+      const duration = Date.now() - startTime;
+      console.log(`⏱️ [GET] /videos/search | Tiempo total: ${duration} ms`);
       return res.json(formatted);
     }
 
-    // 🔹 If there is no specific search ("popular"), we show several genres
+    // 🔹 Si no hay query, mostrar géneros populares
     const genres = ["action", "comedy", "romance", "horror", "sci-fi", "adventure", "animation"];
-    
-    console.log(`🎬 Cargando videos populares de géneros: ${genres.join(", ")}`);
+    console.log(`🎬 [GET] /videos/search | Cargando videos populares de: ${genres.join(", ")}`);
 
     const allResults = await Promise.all(
       genres.map(async (genre) => {
@@ -76,12 +79,12 @@ router.get("/search", async (req, res) => {
           );
 
           if (!response.ok) {
-            console.warn(`⚠️ Error obteniendo ${genre}: ${response.status}`);
+            console.warn(`⚠️ [PEXELS] Error al obtener ${genre}: ${response.status}`);
             return [];
           }
 
           const data = await response.json();
-          console.log(`✅ ${genre}: ${data.videos?.length || 0} videos`);
+          console.log(`✅ [PEXELS] ${genre}: ${data.videos?.length || 0} videos obtenidos`);
 
           return data.videos.map((v: any) => ({
             id: v.id,
@@ -92,19 +95,20 @@ router.get("/search", async (req, res) => {
             videoUrl: v.video_files?.[0]?.link || null,
           }));
         } catch (error) {
-          console.error(`❌ Error en género ${genre}:`, error);
+          console.error(`❌ [PEXELS] Error procesando género "${genre}":`, error);
           return [];
         }
       })
     );
 
-    // 🔹 We unite all genres in a single list
     const formatted = allResults.flat();
-    console.log(`🎉 Total de videos cargados: ${formatted.length}`);
+    const duration = Date.now() - startTime;
+    console.log(`🎉 [GET] /videos/search | Total de videos cargados: ${formatted.length}`);
+    console.log(`⏱️ [GET] /videos/search | Tiempo total: ${duration} ms`);
 
     res.json(formatted);
   } catch (error: any) {
-    console.error("❌ Error en /videos/search:", error.message);
+    console.error("❌ [GET] /videos/search | Error general:", error.message);
     console.error("📛 Stack:", error.stack);
     res.status(500).json({ error: "Error al cargar videos: " + error.message });
   }
@@ -114,14 +118,20 @@ router.get("/search", async (req, res) => {
  * @route GET /health
  * @description Health check endpoint to verify if the video route and Pexels API key are configured correctly.
  * @access Public
- * @returns {Object} JSON response containing the service status and API key configuration status.
  */
 router.get("/health", (req, res) => {
+  console.log("🩺 [GET] /videos/health | Verificando estado del servicio...");
+  const keyStatus = process.env.PEXELS_API_KEY ? "✅ Configurada" : "❌ No configurada";
+  console.log(`📡 [GET] /videos/health | Estado API Key: ${keyStatus}`);
+  
   res.json({ 
     status: "OK", 
-    message: "Ruta de videos funcionando",
-    pexelsKey: process.env.PEXELS_API_KEY ? "✅ Configurada" : "❌ No configurada"
+    message: "Ruta de videos funcionando correctamente",
+    pexelsKey: keyStatus
   });
+  console.log("✅ [GET] /videos/health | Respuesta enviada correctamente.");
 });
+
+console.log("✅ [VideoRoutes] Rutas de videos cargadas correctamente.");
 
 export default router;
