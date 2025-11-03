@@ -2,7 +2,7 @@ import express from 'express';
 import { supabase } from '../config/supabase';
 import { Request, Response } from 'express';
 
-console.log('🚀 [FavoriteRoutes] Inicializando rutas de favoritos...');
+console.log('🚀 [FavoriteRoutes] Inicializando rutas de favoritos SIMPLIFICADAS...');
 
 const router = express.Router();
 
@@ -17,26 +17,7 @@ async function getUserIdFromAuth(token: string): Promise<string | null> {
       console.warn('⚠️ [AUTH] Token inválido o usuario no encontrado');
       return null;
     }
-
-    console.log(`🧩 [AUTH] Usuario autenticado Supabase ID: ${user.id}`);
-
-    // 🔥 CAMBIO CRÍTICO: Usar directamente el user.id de Supabase Auth
-    // Verificar si existe en tabla Usuario (pero usar auth ID directamente si no)
-    const { data: usuario, error: usuarioError } = await supabase
-      .from('Usuario')
-      .select('id_usuario')
-      .eq('id_usuario', user.id)
-      .single();
-
-    if (usuarioError || !usuario) {
-      console.warn('⚠️ [AUTH] Usuario no encontrado en tabla Usuario, usando auth ID directamente');
-      // Si no existe en tabla Usuario, usar el auth ID directamente
-      // Esto puede pasar si el trigger no creó el usuario correctamente
-      return user.id;
-    }
-
-    console.log(`✅ [AUTH] Usuario encontrado en BD: ${usuario.id_usuario}`);
-    return usuario.id_usuario;
+    return user.id;
   } catch (error) {
     console.error('💥 [AUTH] Error interno en getUserIdFromAuth:', error);
     return null;
@@ -44,126 +25,10 @@ async function getUserIdFromAuth(token: string): Promise<string | null> {
 }
 
 /* ──────────────────────────────────────────────── */
-/* 🔹 FUNCIÓN: Obtener o crear contenido por ID     */
-/* ──────────────────────────────────────────────── */
-async function getOrCreateContentId(pexelsId: number | string, movieData?: any): Promise<string | null> {
-  const startTime = Date.now();
-  console.log(`🎬 [CONTENT] Buscando/creando contenido con ID externo: ${pexelsId}`);
-
-  try {
-    // Primero buscar por ID externo
-    const { data: existingContent, error: searchError } = await supabase
-      .from('Contenido')
-      .select('id_contenido')
-      .eq('id_externo', pexelsId.toString())
-      .single();
-
-    if (existingContent && !searchError) {
-      console.log(`✅ [CONTENT] Contenido existente encontrado: ${existingContent.id_contenido}`);
-      return existingContent.id_contenido;
-    }
-
-    // Si no existe, crear uno nuevo
-    console.log('🆕 [CONTENT] Creando nuevo contenido...');
-    const newContentId = generateUUID();
-
-    const contentData = {
-      id_contenido: newContentId,
-      id_externo: pexelsId.toString(),
-      titulo: movieData?.title || `Video ${pexelsId}`,
-      descripcion: movieData?.description || 'Video obtenido desde Pexels API',
-      tipo: 'video',
-      fecha: new Date().toISOString().split('T')[0],
-      duracion: '00:00',
-      calificacion: 0,
-      poster: movieData?.poster || null,
-      genero: movieData?.genre || 'general'
-    };
-
-    console.log('📝 [CONTENT] Insertando contenido:', contentData);
-
-    const { data: newContent, error: createError } = await supabase
-      .from('Contenido')
-      .insert([contentData])
-      .select('id_contenido')
-      .single();
-
-    if (createError) {
-      console.error('❌ [CONTENT] Error creando contenido:', createError);
-
-      // Intentar buscar nuevamente (por si fue creado concurrentemente)
-      const { data: retryContent } = await supabase
-        .from('Contenido')
-        .select('id_contenido')
-        .eq('id_externo', pexelsId.toString())
-        .single();
-
-      if (retryContent) {
-        console.log(`✅ [CONTENT] Contenido encontrado en reintento: ${retryContent.id_contenido}`);
-        return retryContent.id_contenido;
-      }
-
-      return null;
-    }
-
-    console.log(`✅ [CONTENT] Nuevo contenido creado con ID: ${newContent.id_contenido}`);
-    return newContent.id_contenido;
-  } catch (error: any) {
-    console.error('💥 [CONTENT] Error interno en getOrCreateContentId:', error);
-    return null;
-  }
-}
-
-/* ──────────────────────────────────────────────── */
-/* 🔸 RUTA: Obtener todos los favoritos del usuario */
-/* ──────────────────────────────────────────────── */
-router.get('/my-favorites', async (req: Request, res: Response) => {
-  console.log('➡️ [GET FAVORITES] Petición recibida para obtener favoritos');
-  const startTime = Date.now();
-
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Token requerido' });
-
-  try {
-    const userId = await getUserIdFromAuth(token);
-    if (!userId) return res.status(401).json({ error: 'Token inválido' });
-
-    console.log(`🟢 [GET FAVORITES] Consultando favoritos del usuario: ${userId}`);
-
-    const { data, error } = await supabase
-      .from('Favoritos')
-      .select(`
-        *,
-        Contenido (
-          id_contenido,
-          id_externo,
-          titulo,
-          descripcion,
-          duracion,
-          tipo,
-          fecha,
-          calificacion
-        )
-      `)
-      .eq('id_usuario', userId);
-
-    if (error) throw error;
-
-    console.log(`✅ [GET FAVORITES] ${data?.length || 0} favoritos encontrados`);
-    console.log(`⏱️ [GET FAVORITES] Tiempo total: ${Date.now() - startTime} ms`);
-    res.json(data || []);
-  } catch (error: any) {
-    console.error('💥 [GET FAVORITES] Error al obtener favoritos:', error.message);
-    res.status(500).json({ error: 'Error al obtener favoritos', details: error.message });
-  }
-});
-
-/* ──────────────────────────────────────────────── */
 /* 🔸 RUTA: Agregar contenido a favoritos           */
 /* ──────────────────────────────────────────────── */
 router.post('/', async (req: Request, res: Response) => {
   console.log('➡️ [ADD FAVORITE] Petición para agregar favorito:', req.body);
-  const startTime = Date.now();
 
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) {
@@ -174,31 +39,62 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const userId = await getUserIdFromAuth(token);
     console.log(`🔹 [ADD FAVORITE] User ID obtenido: ${userId}`);
-
+    
     if (!userId) {
       console.error('❌ [ADD FAVORITE] No se pudo obtener user ID del token');
       return res.status(401).json({ error: 'Token inválido' });
     }
 
-    const { id_contenido, movie_data } = req.body;
+    const { id_contenido } = req.body;
     if (!id_contenido) {
       console.error('❌ [ADD FAVORITE] ID de contenido no proporcionado');
       return res.status(400).json({ error: 'ID de contenido requerido' });
     }
 
-    console.log(`🔹 [ADD FAVORITE] ID de contenido recibido: ${id_contenido}`);
-    console.log(`🔹 [ADD FAVORITE] Movie data:`, movie_data);
+    console.log(`🔹 [ADD FAVORITE] ID de Pexels recibido: ${id_contenido}`);
 
-    const contenidoId = await getOrCreateContentId(id_contenido, movie_data);
-    console.log(`🔹 [ADD FAVORITE] Contenido ID: ${contenidoId}`);
+    // 🔥 PRIMERO: Buscar si ya existe el contenido en la tabla Contenido
+    const { data: contenidoExistente, error: contenidoError } = await supabase
+      .from('Contenido')
+      .select('id_contenido')
+      .eq('id_externo', id_contenido.toString())
+      .single();
 
-    if (!contenidoId) {
-      console.error('❌ [ADD FAVORITE] No se pudo obtener/crear contenido ID');
-      return res.status(400).json({ error: 'Error al procesar el contenido' });
+    let contenidoId: string;
+
+    if (contenidoExistente) {
+      // Si ya existe, usar ese ID
+      contenidoId = contenidoExistente.id_contenido;
+      console.log(`✅ [ADD FAVORITE] Contenido existente encontrado: ${contenidoId}`);
+    } else {
+      // Si no existe, crear uno nuevo
+      console.log('🆕 [ADD FAVORITE] Creando nuevo contenido...');
+      const newContentId = generateUUID();
+      
+      const { data: nuevoContenido, error: createError } = await supabase
+        .from('Contenido')
+        .insert([{
+          id_contenido: newContentId,
+          id_externo: id_contenido.toString(),
+          titulo: `Video ${id_contenido}`,
+          tipo: 'video',
+          fecha: new Date().toISOString().split('T')[0],
+          duracion: '00:00',
+          calificacion: 0
+        }])
+        .select('id_contenido')
+        .single();
+
+      if (createError) {
+        console.error('❌ [ADD FAVORITE] Error creando contenido:', createError);
+        return res.status(400).json({ error: 'Error al procesar el contenido' });
+      }
+
+      contenidoId = nuevoContenido.id_contenido;
+      console.log(`✅ [ADD FAVORITE] Nuevo contenido creado: ${contenidoId}`);
     }
 
-    // Verificar si ya existe
-    console.log(`🔹 [ADD FAVORITE] Verificando si ya existe favorito...`);
+    // 🔥 VERIFICAR SI YA EXISTE EN FAVORITOS
     const { data: existing, error: checkError } = await supabase
       .from('Favoritos')
       .select('*')
@@ -216,7 +112,7 @@ router.post('/', async (req: Request, res: Response) => {
       throw checkError;
     }
 
-    // Insertar favorito
+    // INSERTAR FAVORITO
     const favoritoData = {
       id_favorito: generateUUID(),
       id_usuario: userId,
@@ -229,21 +125,7 @@ router.post('/', async (req: Request, res: Response) => {
     const { data, error } = await supabase
       .from('Favoritos')
       .insert([favoritoData])
-      .select(`
-        *,
-        Contenido (
-          id_contenido,
-          id_externo,
-          titulo,
-          descripcion,
-          duracion,
-          tipo,
-          fecha,
-          calificacion,
-          poster,
-          genero
-        )
-      `);
+      .select('*');
 
     if (error) {
       console.error('❌ [ADD FAVORITE] Error insertando en Supabase:', error);
@@ -251,69 +133,13 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     console.log('✅ [ADD FAVORITE] Favorito agregado correctamente');
-    console.log('📦 [ADD FAVORITE] Datos retornados:', data);
-    console.log(`⏱️ [ADD FAVORITE] Tiempo total: ${Date.now() - startTime} ms`);
-
-    res.status(201).json(data[0]);
+    res.status(201).json({ 
+      message: 'Favorito agregado correctamente',
+      favorito: data[0]
+    });
   } catch (error: any) {
     console.error('💥 [ADD FAVORITE] Error agregando favorito:', error.message);
-    console.error('📛 [ADD FAVORITE] Stack:', error.stack);
-    res.status(500).json({ error: 'Error al agregar favorito', details: error.message });
-  }
-});
-
-/* ──────────────────────────────────────────────── */
-/* 🔸 RUTA: Eliminar contenido de favoritos         */
-/* ──────────────────────────────────────────────── */
-router.delete('/:contentId', async (req: Request, res: Response) => {
-  console.log('➡️ [DELETE FAVORITE] Petición recibida:', req.params);
-  const startTime = Date.now();
-
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Token requerido' });
-
-  try {
-    const userId = await getUserIdFromAuth(token);
-    if (!userId) return res.status(401).json({ error: 'Token inválido' });
-
-    const contentId = req.params.contentId;
-    if (!contentId) return res.status(400).json({ error: 'ID de contenido requerido' });
-
-    console.log(`🗑️ [DELETE FAVORITE] Eliminando favorito con ID: ${contentId}`);
-
-    // Obtener UUID del contenido
-    let contenidoId: string;
-    if (isValidUUID(contentId)) {
-      contenidoId = contentId;
-    } else {
-      const { data: contentData, error: contentError } = await supabase
-        .from('Contenido')
-        .select('id_contenido')
-        .eq('id_externo', contentId.toString())
-        .single();
-
-      if (contentError || !contentData) {
-        console.error('❌ [DELETE FAVORITE] Contenido no encontrado');
-        return res.status(404).json({ error: 'Contenido no encontrado' });
-      }
-
-      contenidoId = contentData.id_contenido;
-    }
-
-    const { error } = await supabase
-      .from('Favoritos')
-      .delete()
-      .eq('id_usuario', userId)
-      .eq('id_contenido', contenidoId);
-
-    if (error) throw error;
-
-    console.log('✅ [DELETE FAVORITE] Favorito eliminado correctamente');
-    console.log(`⏱️ [DELETE FAVORITE] Tiempo total: ${Date.now() - startTime} ms`);
-    res.json({ message: 'Favorito eliminado' });
-  } catch (error: any) {
-    console.error('💥 [DELETE FAVORITE] Error eliminando favorito:', error.message);
-    res.status(500).json({ error: 'Error al eliminar favorito' });
+    res.status(500).json({ error: 'Error al agregar favorito' });
   }
 });
 
@@ -333,26 +159,21 @@ router.get('/check/:contentId', async (req: Request, res: Response) => {
     const contentId = req.params.contentId;
     if (!contentId) return res.status(400).json({ error: 'ID de contenido requerido' });
 
-    let contenidoId: string;
+    // 🔥 BUSCAR POR id_externo EN CONTENIDO
+    const { data: contenido } = await supabase
+      .from('Contenido')
+      .select('id_contenido')
+      .eq('id_externo', contentId.toString())
+      .single();
 
-    if (isValidUUID(contentId)) {
-      contenidoId = contentId;
-    } else {
-      const { data: contentData } = await supabase
-        .from('Contenido')
-        .select('id_contenido')
-        .eq('id_externo', contentId.toString())
-        .single();
+    if (!contenido) return res.json({ isFavorite: false });
 
-      contenidoId = contentData?.id_contenido;
-      if (!contenidoId) return res.json({ isFavorite: false });
-    }
-
+    // VERIFICAR SI ESTÁ EN FAVORITOS
     const { data } = await supabase
       .from('Favoritos')
       .select('*')
       .eq('id_usuario', userId)
-      .eq('id_contenido', contenidoId)
+      .eq('id_contenido', contenido.id_contenido)
       .single();
 
     res.json({ isFavorite: !!data });
@@ -360,6 +181,98 @@ router.get('/check/:contentId', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('💥 [CHECK FAVORITE] Error verificando favorito:', error.message);
     res.status(500).json({ error: 'Error al verificar favorito' });
+  }
+});
+
+/* ──────────────────────────────────────────────── */
+/* 🔸 RUTA: Obtener favoritos del usuario           */
+/* ──────────────────────────────────────────────── */
+router.get('/my-favorites', async (req: Request, res: Response) => {
+  console.log('➡️ [GET FAVORITES] Petición recibida para obtener favoritos');
+
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Token requerido' });
+
+  try {
+    const userId = await getUserIdFromAuth(token);
+    if (!userId) return res.status(401).json({ error: 'Token inválido' });
+
+    console.log(`🟢 [GET FAVORITES] Consultando favoritos del usuario: ${userId}`);
+
+    // 🔥 OBTENER FAVORITOS CON INFORMACIÓN DEL CONTENIDO
+    const { data: favoritos, error } = await supabase
+      .from('Favoritos')
+      .select(`
+        *,
+        Contenido (
+          id_contenido,
+          id_externo,
+          titulo,
+          descripcion,
+          duracion,
+          tipo,
+          fecha,
+          calificacion,
+          poster,
+          genero
+        )
+      `)
+      .eq('id_usuario', userId);
+
+    if (error) throw error;
+
+    console.log(`✅ [GET FAVORITES] ${favoritos?.length || 0} favoritos encontrados`);
+    res.json(favoritos || []);
+  } catch (error: any) {
+    console.error('💥 [GET FAVORITES] Error al obtener favoritos:', error.message);
+    res.status(500).json({ error: 'Error al obtener favoritos' });
+  }
+});
+
+/* ──────────────────────────────────────────────── */
+/* 🔸 RUTA: Eliminar de favoritos                   */
+/* ──────────────────────────────────────────────── */
+router.delete('/:contentId', async (req: Request, res: Response) => {
+  console.log('➡️ [DELETE FAVORITE] Petición recibida:', req.params);
+
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Token requerido' });
+
+  try {
+    const userId = await getUserIdFromAuth(token);
+    if (!userId) return res.status(401).json({ error: 'Token inválido' });
+
+    const contentId = req.params.contentId;
+    if (!contentId) return res.status(400).json({ error: 'ID de contenido requerido' });
+
+    console.log(`🗑️ [DELETE FAVORITE] Eliminando favorito con ID Pexels: ${contentId}`);
+
+    // 🔥 BUSCAR CONTENIDO POR id_externo
+    const { data: contenido, error: contenidoError } = await supabase
+      .from('Contenido')
+      .select('id_contenido')
+      .eq('id_externo', contentId.toString())
+      .single();
+
+    if (contenidoError || !contenido) {
+      console.error('❌ [DELETE FAVORITE] Contenido no encontrado');
+      return res.status(404).json({ error: 'Contenido no encontrado' });
+    }
+
+    // ELIMINAR DE FAVORITOS
+    const { error } = await supabase
+      .from('Favoritos')
+      .delete()
+      .eq('id_usuario', userId)
+      .eq('id_contenido', contenido.id_contenido);
+
+    if (error) throw error;
+
+    console.log('✅ [DELETE FAVORITE] Favorito eliminado correctamente');
+    res.json({ message: 'Favorito eliminado' });
+  } catch (error: any) {
+    console.error('💥 [DELETE FAVORITE] Error eliminando favorito:', error.message);
+    res.status(500).json({ error: 'Error al eliminar favorito' });
   }
 });
 
@@ -372,10 +285,6 @@ function generateUUID(): string {
     const v = c == 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
   });
-}
-
-function isValidUUID(uuid: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
 }
 
 console.log('✅ [FavoriteRoutes] Rutas de favoritos cargadas correctamente.');
