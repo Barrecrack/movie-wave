@@ -1,7 +1,6 @@
 /**
  * @file AuthController.js
- * @description Handles all authentication-related operations such as user registration, login,
- * profile updates, password recovery, and password reset using Supabase authentication and JWT.
+ * @description Handles all authentication-related operations - VERSIÓN CON TRIGGER
  */
 
 import { supabase } from '../config/supabase';
@@ -9,34 +8,21 @@ import jwt from 'jsonwebtoken';
 import { sendRecoveryEmail } from '../services/emailService';
 import { Request, Response } from 'express';
 
-/**
- * @class AuthController
- * @classdesc Controller that manages authentication and user-related actions using Supabase.
- */
 class AuthController {
 
-  /**
-   * Calculates age from birthdate
-   */
   private calculateAge(birthDate: string): number {
     const today = new Date();
     const birth = new Date(birthDate);
     let age = today.getFullYear() - birth.getFullYear();
     const monthDiff = today.getMonth() - birth.getMonth();
-
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
       age--;
     }
-
     return age;
   }
 
-  /**
-   * Normalizes user data from different field names (english/spanish)
-   */
   private normalizeUserData(body: any) {
     return {
-      // Campos en español (prioridad)
       nombre: body.nombre || body.name,
       apellido: body.apellido || body.lastname,
       correo: body.correo || body.email,
@@ -46,48 +32,54 @@ class AuthController {
   }
 
   /**
-   * Verifica si un usuario ya existe en la tabla Usuario
+   * 🔥 ESPERA a que el trigger cree el usuario en tabla Usuario
    */
-  private async checkUserExists(correo: string): Promise<boolean> {
-    try {
-      const { data, error } = await supabase
-        .from('Usuario')
-        .select('id_usuario')
-        .eq('correo', correo)
-        .maybeSingle(); // Usar maybeSingle en lugar de single
+  private async waitForUsuarioCreation(userId: string, maxAttempts: number = 10): Promise<any> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      console.log(`🔄 Intento ${attempt}/${maxAttempts} - Buscando usuario en tabla Usuario...`);
 
-      if (error) {
-        console.error('❌ Error verificando usuario existente:', error.message);
-        return false;
+      const { data: user, error } = await supabase
+        .from('Usuario')
+        .select('*')
+        .eq('id_usuario', userId)
+        .single();
+
+      if (user) {
+        console.log('✅ Usuario encontrado en tabla Usuario (creado por trigger)');
+        return user;
       }
 
-      return !!data;
-    } catch (error) {
-      console.error('❌ Error en checkUserExists:', error);
-      return false;
+      if (error && error.code !== 'PGRST116') {
+        console.error('❌ Error buscando usuario:', error.message);
+      }
+
+      // Esperar antes del siguiente intento
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
+
+    console.error(`❌ Usuario no apareció en tabla Usuario después de ${maxAttempts} intentos`);
+    return null;
   }
 
   /**
-   * Registers a new user in Supabase and creates entry in Usuario table.
+   * REGISTER - Solo registra en Auth, el trigger crea en Usuario
    */
   async register(req: Request, res: Response) {
-    console.log('🟢 [REGISTER] Solicitud recibida con body:', req.body);
+    console.log('🟢 [REGISTER] Solicitud recibida:', req.body);
 
     const normalizedData = this.normalizeUserData(req.body);
     const { nombre, apellido, correo, contrasena, edad } = normalizedData;
 
     try {
-      // Validar campos requeridos
       if (!correo || !contrasena || !nombre || !apellido) {
         return res.status(400).json({
-          error: 'Correo/email, contraseña/password, nombre/name y apellido/lastname son requeridos'
+          error: 'Correo, contraseña, nombre y apellido son requeridos'
         });
       }
 
       console.log('🔹 Registrando usuario en Supabase Auth...');
 
-      // Registrar usuario en Supabase Auth
+      // 1. SOLO registrar en Auth - el trigger creará automáticamente en Usuario
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: correo,
         password: contrasena,
@@ -101,71 +93,33 @@ class AuthController {
       });
 
       if (authError) {
-        console.error('❌ Error en Supabase Auth:', authError.message);
+        console.error('❌ Error en Auth:', authError.message);
         return res.status(400).json({ error: authError.message });
       }
 
       if (!authData.user) {
-        return res.status(400).json({ error: 'No se pudo crear el usuario en Auth' });
+        return res.status(400).json({ error: 'No se pudo crear usuario en Auth' });
       }
 
       console.log('✅ Usuario registrado en Auth:', authData.user.email);
 
-      // 🔥 CORRECCIÓN: Usar let en lugar de const para userData
-      let userData; // Cambiado de const a let
+      // 2. ESPERAR a que el trigger cree el usuario en tabla Usuario
+      console.log('🔹 Esperando creación automática en tabla Usuario...');
+      const usuarioData = await this.waitForUsuarioCreation(authData.user.id);
 
-      // Crear usuario en tabla Usuario
-      console.log('🔹 Creando usuario en tabla Usuario...');
-      const { data: newUserData, error: userError } = await supabase
-        .from('Usuario')
-        .insert([
-          {
-            id_usuario: authData.user.id,
-            nombre,
-            apellido,
-            correo,
-            contrasena: contrasena,
-            edad: edad ? new Date(edad).toISOString().split('T')[0] : null
-          }
-        ])
-        .select()
-        .single();
-
-      if (userError) {
-        console.error('❌ Error creando usuario en tabla Usuario:', userError.message);
-
-        // Si el error es por duplicado, intentar obtener el usuario existente
-        if (userError.code === '23505') { // Código de violación de unique constraint
-          console.log('🔄 Usuario ya existe en tabla, obteniendo datos...');
-          const { data: existingUser, error: fetchError } = await supabase
-            .from('Usuario')
-            .select('*')
-            .eq('id_usuario', authData.user.id)
-            .single();
-
-          if (fetchError) {
-            console.error('❌ Error obteniendo usuario existente:', fetchError.message);
-            throw fetchError;
-          }
-
-          console.log('✅ Usuario existente obtenido:', existingUser.id_usuario);
-          userData = existingUser;
-        } else {
-          throw userError;
-        }
-      } else {
-        console.log('✅ Usuario creado en tabla Usuario:', newUserData.id_usuario);
-        userData = newUserData;
+      if (!usuarioData) {
+        console.error('❌ No se pudo obtener usuario de tabla Usuario');
+        return res.status(500).json({ error: 'Error al completar el registro' });
       }
 
       res.status(201).json({
         message: 'Usuario registrado exitosamente',
         user: {
-          id: userData.id_usuario,
-          nombre: userData.nombre,
-          apellido: userData.apellido,
-          correo: userData.correo,
-          edad: userData.edad
+          id: usuarioData.id_usuario,
+          nombre: usuarioData.nombre,
+          apellido: usuarioData.apellido,
+          correo: usuarioData.correo,
+          edad: usuarioData.edad
         },
         session: authData.session,
         token: authData.session?.access_token
@@ -178,17 +132,17 @@ class AuthController {
   }
 
   /**
-   * Logs in a user with email and password credentials.
+   * LOGIN - Versión simplificada con trigger
    */
   async login(req: Request, res: Response) {
-    console.log('🟢 [LOGIN] Intento de inicio de sesión con body:', req.body);
+    console.log('🟢 [LOGIN] Intento de inicio de sesión:', req.body);
 
     const normalizedData = this.normalizeUserData(req.body);
     const { correo, contrasena } = normalizedData;
 
     try {
       if (!correo || !contrasena) {
-        return res.status(400).json({ error: 'Correo/email y contraseña/password son requeridos' });
+        return res.status(400).json({ error: 'Correo y contraseña son requeridos' });
       }
 
       console.log('🔹 Autenticando usuario...');
@@ -202,36 +156,28 @@ class AuthController {
         return res.status(401).json({ error: 'Credenciales inválidas' });
       }
 
-      // Obtener datos adicionales del usuario desde la tabla Usuario
-      const { data: userData, error: userError } = await supabase
+      // Obtener datos de tabla Usuario
+      const { data: usuarioData, error: usuarioError } = await supabase
         .from('Usuario')
         .select('*')
         .eq('id_usuario', data.user.id)
-        .maybeSingle(); // Cambiar a maybeSingle para evitar error de múltiples resultados
+        .single();
 
-      if (userError && userError.code !== 'PGRST116') { // PGRST116 = no rows
-        console.error('❌ Error obteniendo datos del usuario:', userError.message);
+      if (usuarioError) {
+        console.error('❌ Error obteniendo datos de usuario:', usuarioError.message);
+        return res.status(500).json({ error: 'Error al obtener datos del usuario' });
       }
 
       console.log('✅ Login exitoso para:', data.user.email);
 
-      // Si no hay datos en la tabla Usuario, usar datos de Auth como fallback
-      const userProfile = userData || {
-        id_usuario: data.user.id,
-        nombre: data.user.user_metadata?.nombre || '',
-        apellido: data.user.user_metadata?.apellido || '',
-        correo: data.user.email || '',
-        edad: data.user.user_metadata?.edad || null
-      };
-
       res.json({
         message: 'Login exitoso',
         user: {
-          id: userProfile.id_usuario,
-          nombre: userProfile.nombre,
-          apellido: userProfile.apellido,
-          correo: userProfile.correo,
-          edad: userProfile.edad
+          id: usuarioData.id_usuario,
+          nombre: usuarioData.nombre,
+          apellido: usuarioData.apellido,
+          correo: usuarioData.correo,
+          edad: usuarioData.edad
         },
         session: data.session,
         token: data.session?.access_token,
@@ -244,7 +190,7 @@ class AuthController {
   }
 
   /**
-   * Retrieves the authenticated user's profile data.
+   * GET USER PROFILE - Versión simplificada
    */
   async getUserProfile(req: Request, res: Response) {
     console.log('🟢 [GET USER PROFILE] Solicitud recibida');
@@ -261,43 +207,26 @@ class AuthController {
         return res.status(401).json({ error: 'Token inválido o expirado' });
       }
 
-      // Obtener datos del usuario desde tabla Usuario
-      const { data: userData, error: userError } = await supabase
+      // Obtener datos de tabla Usuario
+      const { data: usuarioData, error: usuarioError } = await supabase
         .from('Usuario')
         .select('*')
         .eq('id_usuario', user.id)
-        .maybeSingle(); // Cambiar a maybeSingle
+        .single();
 
-      if (userError && userError.code !== 'PGRST116') {
-        console.error('❌ Error obteniendo datos de tabla Usuario:', userError.message);
+      if (usuarioError) {
+        console.error('❌ Error obteniendo perfil:', usuarioError.message);
         return res.status(500).json({ error: 'Error al obtener perfil' });
       }
 
-      // Si no se encuentra en la tabla Usuario, usar datos de Auth
-      if (!userData) {
-        console.warn('⚠️ Usuario no encontrado en tabla Usuario, usando datos de Auth');
-
-        const edad = user.user_metadata?.edad;
-        const age = edad ? this.calculateAge(edad) : null;
-
-        return res.json({
-          id: user.id,
-          nombre: user.user_metadata?.nombre || '',
-          apellido: user.user_metadata?.apellido || '',
-          correo: user.email || '',
-          edad: edad || '',
-          age: age
-        });
-      }
-
-      const edad = userData?.edad;
+      const edad = usuarioData?.edad;
       const age = edad ? this.calculateAge(edad) : null;
 
       res.json({
-        id: userData.id_usuario,
-        nombre: userData.nombre || '',
-        apellido: userData.apellido || '',
-        correo: userData.correo || '',
+        id: usuarioData.id_usuario,
+        nombre: usuarioData.nombre || '',
+        apellido: usuarioData.apellido || '',
+        correo: usuarioData.correo || '',
         edad: edad || '',
         age: age
       });
@@ -308,7 +237,7 @@ class AuthController {
   }
 
   /**
-   * Updates user information.
+   * UPDATE USER - Actualiza en Auth y Usuario
    */
   async updateUser(req: Request, res: Response) {
     console.log('🟢 [UPDATE USER] Solicitud de actualización recibida.');
@@ -374,8 +303,8 @@ class AuthController {
   }
 
   /**
-   * Sends a password recovery email.
-   */
+  * Sends a password recovery email.
+  */
   async forgotPassword(req: Request, res: Response) {
     console.log('🟢 [FORGOT PASSWORD] Solicitud recibida para:', req.body);
 
