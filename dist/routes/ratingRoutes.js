@@ -41,11 +41,15 @@ router.post('/', async (req, res) => {
             console.error('❌ [ADD RATING] ID de contenido no proporcionado');
             return res.status(400).json({ error: 'ID de contenido requerido' });
         }
-        if (!puntuacion || puntuacion < 1 || puntuacion > 5) {
+        if (puntuacion === undefined && comentario === undefined) {
+            console.error('❌ [ADD RATING] Se requiere al menos puntuación o comentario');
+            return res.status(400).json({ error: 'Se requiere al menos puntuación o comentario' });
+        }
+        if (puntuacion !== undefined && (puntuacion < 1 || puntuacion > 5)) {
             console.error('❌ [ADD RATING] Puntuación inválida');
             return res.status(400).json({ error: 'Puntuación debe ser entre 1 y 5' });
         }
-        console.log(`🔹 [ADD RATING] ID de Pexels recibido: ${id_contenido}, Puntuación: ${puntuacion}`);
+        console.log(`🔹 [ADD RATING] ID de Pexels recibido: ${id_contenido}, Puntuación: ${puntuacion}, Comentario: ${comentario ? 'Sí' : 'No'}`);
         const { data: contenidoExistente, error: contenidoError } = await supabase_1.supabase
             .from('Contenido')
             .select('id_contenido')
@@ -88,13 +92,19 @@ router.post('/', async (req, res) => {
         let result;
         if (existingRating) {
             console.log('🔄 [ADD RATING] Actualizando calificación existente...');
+            const updateData = {
+                fecha: new Date().toISOString().split('T')[0]
+            };
+            if (puntuacion !== undefined) {
+                updateData.puntuacion = puntuacion;
+            }
+            if (comentario !== undefined) {
+                updateData.comentario = comentario && comentario.trim() !== "" ? comentario : null;
+            }
+            console.log('🔹 [ADD RATING] Datos a actualizar:', updateData);
             const { data, error } = await supabase_1.supabase
                 .from('Calificaciones')
-                .update({
-                puntuacion: puntuacion,
-                comentario: comentario && comentario.trim() !== "" ? comentario : null,
-                fecha: new Date().toISOString().split('T')[0]
-            })
+                .update(updateData)
                 .eq('id_calificacion', existingRating.id_calificacion)
                 .select('*');
             if (error) {
@@ -106,12 +116,15 @@ router.post('/', async (req, res) => {
         }
         else {
             console.log('🆕 [ADD RATING] Creando nueva calificación...');
+            if (puntuacion === undefined && comentario === undefined) {
+                return res.status(400).json({ error: 'Se requiere al menos puntuación o comentario para crear una nueva calificación' });
+            }
             const ratingData = {
                 id_calificacion: generateUUID(),
                 id_usuario: userId,
                 id_contenido: contenidoId,
-                puntuacion: puntuacion,
-                comentario: comentario && comentario.trim() !== "" ? comentario : null,
+                puntuacion: puntuacion !== undefined ? puntuacion : null,
+                comentario: comentario !== undefined && comentario.trim() !== "" ? comentario : null,
                 fecha: new Date().toISOString().split('T')[0]
             };
             console.log('🔹 [ADD RATING] Insertando calificación:', ratingData);
