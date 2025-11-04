@@ -92,13 +92,15 @@ router.post('/', async (req, res) => {
                 .from('Calificaciones')
                 .update({
                 puntuacion: puntuacion,
-                comentario: comentario || null,
+                comentario: comentario && comentario.trim() !== "" ? comentario : null,
                 fecha: new Date().toISOString().split('T')[0]
             })
                 .eq('id_calificacion', existingRating.id_calificacion)
                 .select('*');
-            if (error)
+            if (error) {
+                console.error('❌ [ADD RATING] Error actualizando calificación:', error);
                 throw error;
+            }
             result = data[0];
             console.log('✅ [ADD RATING] Calificación actualizada correctamente');
         }
@@ -109,7 +111,7 @@ router.post('/', async (req, res) => {
                 id_usuario: userId,
                 id_contenido: contenidoId,
                 puntuacion: puntuacion,
-                comentario: comentario || null,
+                comentario: comentario && comentario.trim() !== "" ? comentario : null,
                 fecha: new Date().toISOString().split('T')[0]
             };
             console.log('🔹 [ADD RATING] Insertando calificación:', ratingData);
@@ -117,8 +119,10 @@ router.post('/', async (req, res) => {
                 .from('Calificaciones')
                 .insert([ratingData])
                 .select('*');
-            if (error)
+            if (error) {
+                console.error('❌ [ADD RATING] Error insertando calificación:', error);
                 throw error;
+            }
             result = data[0];
             console.log('✅ [ADD RATING] Calificación creada correctamente');
         }
