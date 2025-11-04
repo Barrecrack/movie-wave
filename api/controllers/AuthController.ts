@@ -87,7 +87,7 @@ class AuthController {
             nombre: name,
             apellido: lastname,
             edad: birthdate,
-            correo: email  // 🔥 NUEVO: Incluir correo también
+            correo: email
           }
         },
       });

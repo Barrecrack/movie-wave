@@ -14,7 +14,7 @@ router.post('/register', (req, res) => {
         .catch(err => console.error('❌ [POST] /register | Error en registro:', err.message));
 });
 router.post('/login', (req, res) => {
-    console.log('➡️ [POST] /login | Intento de inicio de sesión para:', req.body.correo);
+    console.log('➡️ [POST] /login | Intento de inicio de sesión para:', req.body.email);
     AuthController_1.default.login(req, res)
         .then(() => console.log('✅ [POST] /login | Inicio de sesión exitoso.'))
         .catch(err => console.error('❌ [POST] /login | Error de autenticación:', err.message));
@@ -32,7 +32,7 @@ router.delete('/delete-account', (req, res) => {
         .catch(err => console.error('❌ [DELETE] /delete-account | Error al eliminar cuenta:', err.message));
 });
 router.post('/forgot-password', (req, res) => {
-    console.log('➡️ [POST] /forgot-password | Solicitud de recuperación para:', req.body.correo);
+    console.log('➡️ [POST] /forgot-password | Solicitud de recuperación para:', req.body.email);
     AuthController_1.default.forgotPassword(req, res)
         .then(() => console.log('✅ [POST] /forgot-password | Correo de recuperación enviado.'))
         .catch(err => console.error('❌ [POST] /forgot-password | Error al enviar correo:', err.message));
