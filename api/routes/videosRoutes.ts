@@ -1,3 +1,11 @@
+/**
+ * @file videoRoutes.js
+ * @description Defines routes related to video retrieval and status checking.
+ * Handles video searches via the Pexels API and provides a health check endpoint
+ * to verify correct configuration of the Pexels integration.
+ * @module routes/videoRoutes
+ */
+
 import express from "express";
 import dotenv from "dotenv";
 
@@ -7,9 +15,23 @@ dotenv.config();
 const router = express.Router();
 
 /**
+ * Fetches videos from the Pexels API based on a user query or returns
+ * popular genres if no query is provided.
+ *
  * @route GET /search
- * @description Fetches videos from the Pexels API based on a user query or returns popular genres if no query is provided.
+ * @group Videos
+ * @param {Object} req.query - The query parameters object.
+ * @param {string} [req.query.query] - Optional search term for videos.
+ * @returns {Promise<Object[]>} A list of formatted video objects retrieved from Pexels.
+ * @throws {Error} If there is an issue fetching or processing the Pexels API data.
  * @access Public
+ *
+ * @example
+ * // Example 1: Search videos by query
+ * GET /videos/search?query=mountains
+ *
+ * // Example 2: Get default popular genres
+ * GET /videos/search
  */
 router.get("/search", async (req, res) => {
   const startTime = Date.now();
@@ -115,9 +137,16 @@ router.get("/search", async (req, res) => {
 });
 
 /**
+ * Health check endpoint to verify if the video route
+ * and Pexels API key are configured correctly.
+ *
  * @route GET /health
- * @description Health check endpoint to verify if the video route and Pexels API key are configured correctly.
+ * @group System
+ * @returns {Object} JSON response with route and API key status.
  * @access Public
+ *
+ * @example
+ * GET /videos/health
  */
 router.get("/health", (req, res) => {
   console.log("🩺 [GET] /videos/health | Verificando estado del servicio...");

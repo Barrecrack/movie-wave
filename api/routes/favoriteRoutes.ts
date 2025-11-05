@@ -1,3 +1,9 @@
+/**
+ * @file FavoriteRoutes.ts
+ * @description Handles routes related to user's favorite content. Provides endpoints
+ * for adding, verifying, retrieving, and deleting favorites. Integrates Supabase authentication
+ * and database management.
+ */
 import express from 'express';
 import { supabase } from '../config/supabase';
 import { Request, Response } from 'express';
@@ -6,9 +12,14 @@ console.log('🚀 [FavoriteRoutes] Inicializando rutas de favoritos SIMPLIFICADA
 
 const router = express.Router();
 
-/* ──────────────────────────────────────────────── */
-/* 🔹 FUNCIÓN: Obtener UUID del usuario desde token */
-/* ──────────────────────────────────────────────── */
+/**
+ * Retrieves the authenticated user's UUID from the provided token.
+ * 
+ * @async
+ * @function getUserIdFromAuth
+ * @param {string} token - The user's authentication token.
+ * @returns {Promise<string | null>} The user UUID if valid, otherwise `null`.
+ */
 async function getUserIdFromAuth(token: string): Promise<string | null> {
   console.log('🔑 [AUTH] Verificando token del usuario...');
   try {
@@ -24,9 +35,15 @@ async function getUserIdFromAuth(token: string): Promise<string | null> {
   }
 }
 
-/* ──────────────────────────────────────────────── */
-/* 🔸 RUTA: Agregar contenido a favoritos           */
-/* ──────────────────────────────────────────────── */
+/**
+ * Adds new content to the authenticated user's favorites.
+ * 
+ * @route POST /
+ * @access Private
+ * @param {Request} req - Express request object containing the content data and token.
+ * @param {Response} res - Express response object.
+ * @returns {JSON} Message and favorite record confirmation.
+ */
 router.post('/', async (req: Request, res: Response) => {
   console.log('➡️ [ADD FAVORITE] Petición para agregar favorito:', req.body);
 
@@ -143,9 +160,14 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-/* ──────────────────────────────────────────────── */
-/* 🔸 RUTA: Verificar si un contenido está en favoritos */
-/* ──────────────────────────────────────────────── */
+/**
+ * Checks if specific content is already added to user's favorites.
+ * 
+ * @route GET /check/:contentId
+ * @access Private
+ * @param {Request} req - Request containing content ID in params.
+ * @param {Response} res - Response indicating if content is a favorite.
+ */
 router.get('/check/:contentId', async (req: Request, res: Response) => {
   console.log('➡️ [CHECK FAVORITE] Verificando favorito:', req.params);
 
@@ -184,9 +206,14 @@ router.get('/check/:contentId', async (req: Request, res: Response) => {
   }
 });
 
-/* ──────────────────────────────────────────────── */
-/* 🔸 RUTA: Obtener favoritos del usuario           */
-/* ──────────────────────────────────────────────── */
+/**
+ * Retrieves all favorite content belonging to the authenticated user.
+ * 
+ * @route GET /my-favorites
+ * @access Private
+ * @param {Request} req - Request with authorization token.
+ * @param {Response} res - Response containing a list of favorite items.
+ */
 router.get('/my-favorites', async (req: Request, res: Response) => {
   console.log('➡️ [GET FAVORITES] Petición recibida para obtener favoritos');
 
@@ -228,9 +255,14 @@ router.get('/my-favorites', async (req: Request, res: Response) => {
   }
 });
 
-/* ──────────────────────────────────────────────── */
-/* 🔸 RUTA: Eliminar de favoritos                   */
-/* ──────────────────────────────────────────────── */
+/**
+ * Removes a specific content from user's favorites.
+ * 
+ * @route DELETE /:contentId
+ * @access Private
+ * @param {Request} req - Request containing content ID and token.
+ * @param {Response} res - Response confirming deletion.
+ */
 router.delete('/:contentId', async (req: Request, res: Response) => {
   console.log('➡️ [DELETE FAVORITE] Petición recibida:', req.params);
 
@@ -275,9 +307,12 @@ router.delete('/:contentId', async (req: Request, res: Response) => {
   }
 });
 
-/* ──────────────────────────────────────────────── */
-/* 🔧 Utilidades                                    */
-/* ──────────────────────────────────────────────── */
+/**
+ * Generates a random UUID (v4) string.
+ * 
+ * @function generateUUID
+ * @returns {string} A randomly generated UUID.
+ */
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     const r = Math.random() * 16 | 0;

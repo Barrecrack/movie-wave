@@ -1,17 +1,29 @@
+/**
+ * @file emailService.ts
+ * @description Configures and manages transactional email delivery through the Brevo (Sendinblue) API.
+ * Validates environment variables, initializes the API client, and provides a function to send recovery emails.
+ * @module services/emailService
+ */
+
 import SibApiV3Sdk from 'sib-api-v3-sdk';
 import dotenv from 'dotenv';
 
 console.log('🔹 Cargando configuración de Brevo (Sendinblue)...');
 dotenv.config();
 
-// ======================================================
-// 🔹 VALIDATION OF ENVIRONMENT VARIABLES
-// ======================================================
+/**
+ * Validates required environment variables for Brevo email configuration.
+ * Throws an error if critical variables are missing.
+ * @throws {Error} If the BREVO_API_KEY environment variable is not defined.
+ */
 if (!process.env.BREVO_API_KEY) {
   console.error('❌ BREVO_API_KEY no definida en el archivo .env');
   throw new Error('Falta BREVO_API_KEY en variables de entorno');
 }
 
+/**
+ * Checks and warns if optional email configuration variables are not defined.
+ */
 if (!process.env.EMAIL_SENDER) {
   console.warn('⚠️ EMAIL_SENDER no definida, usando remitente por defecto.');
 }
@@ -20,9 +32,11 @@ if (!process.env.FRONTEND_URL) {
   console.warn('⚠️ FRONTEND_URL no definida, usando http://localhost:5173.');
 }
 
-// ======================================================
-// 🔹 BREVO CLIENT CONFIGURATION
-// ======================================================
+/**
+ * Initializes the Brevo API client and sets the API key for authentication.
+ * @constant
+ * @type {SibApiV3Sdk.TransactionalEmailsApi}
+ */
 console.log('🔹 Inicializando cliente de Brevo...');
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
 const apiKey = defaultClient.authentications['api-key'];
@@ -33,13 +47,15 @@ const brevoApi = new SibApiV3Sdk.TransactionalEmailsApi();
 console.log('✅ Cliente de correo Brevo inicializado.');
 
 /**
+ * Sends a password recovery email to the user using the Brevo (Sendinblue) transactional email service.
+ *
+ * @async
  * @function sendRecoveryEmail
- * @description Sends a password recovery email to the user using the Brevo (Sendinblue) transactional email service.
  * @param {string} userEmail - The recipient's email address.
  * @param {string} resetToken - The unique password reset token used to generate the recovery link.
  * @returns {Promise<void>} Returns a promise that resolves when the email is successfully sent.
  * @throws {Error} Throws an error if there is any issue while sending the recovery email.
- * 
+ *
  * @example
  * await sendRecoveryEmail('user@example.com', '123456abcdef');
  */

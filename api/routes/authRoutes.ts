@@ -1,7 +1,8 @@
-/** 
+/**
  * @file authRoutes.js
  * @description Defines authentication-related routes such as register, login, update user,
  * password recovery, and user profile retrieval. Uses AuthController to handle business logic.
+ * @module routes/authRoutes
  */
 
 import express from 'express';
@@ -12,8 +13,12 @@ console.log('🚀 [AuthRoutes] Inicializando rutas de autenticación...');
 const router = express.Router();
 
 /**
+ * Registers a new user in the system.
+ *
  * @route POST /register
- * @description Registers a new user in the system.
+ * @group Authentication
+ * @param {Object} req.body - User registration data (name, email, password, etc.)
+ * @returns {Promise<void>} Success or error response from controller
  * @access Public
  */
 router.post('/register', (req, res) => {
@@ -24,8 +29,12 @@ router.post('/register', (req, res) => {
 });
 
 /**
+ * Logs in a user and returns a JWT authentication token.
+ *
  * @route POST /login
- * @description Logs in a user and returns a JWT authentication token.
+ * @group Authentication
+ * @param {Object} req.body - Login credentials (email, password)
+ * @returns {Promise<void>} Authenticated session token
  * @access Public
  */
 router.post('/login', (req, res) => {
@@ -36,8 +45,12 @@ router.post('/login', (req, res) => {
 });
 
 /**
+ * Updates authenticated user's data.
+ *
  * @route PUT /update-user
- * @description Updates authenticated user's data.
+ * @group Authentication
+ * @param {Object} req.body - Updated user fields
+ * @returns {Promise<void>} Confirmation of user data update
  * @access Private
  */
 router.put('/update-user', (req, res) => {
@@ -48,8 +61,11 @@ router.put('/update-user', (req, res) => {
 });
 
 /**
+ * Permanently deletes the authenticated user's account.
+ *
  * @route DELETE /delete-account
- * @description Permanently deletes the authenticated user's account.
+ * @group Authentication
+ * @returns {Promise<void>} Confirmation of account deletion
  * @access Private
  */
 router.delete('/delete-account', (req, res) => {
@@ -60,8 +76,12 @@ router.delete('/delete-account', (req, res) => {
 });
 
 /**
+ * Sends a password reset email with recovery instructions.
+ *
  * @route POST /forgot-password
- * @description Sends a password reset email with recovery instructions.
+ * @group Authentication
+ * @param {string} req.body.email - Email address of the user requesting recovery
+ * @returns {Promise<void>} Email sent confirmation
  * @access Public
  */
 router.post('/forgot-password', (req, res) => {
@@ -72,8 +92,13 @@ router.post('/forgot-password', (req, res) => {
 });
 
 /**
+ * Resets a user's password using a valid token.
+ *
  * @route POST /reset-password
- * @description Resets a user's password using a valid token.
+ * @group Authentication
+ * @param {string} req.body.token - Password reset token
+ * @param {string} req.body.newPassword - New password for the account
+ * @returns {Promise<void>} Password reset confirmation
  * @access Public
  */
 router.post('/reset-password', (req, res) => {
@@ -84,8 +109,11 @@ router.post('/reset-password', (req, res) => {
 });
 
 /**
+ * Retrieves the profile information of the authenticated user.
+ *
  * @route GET /user-profile
- * @description Retrieves the profile information of the authenticated user.
+ * @group Authentication
+ * @returns {Promise<void>} Authenticated user profile data
  * @access Private
  */
 router.get('/user-profile', (req, res) => {

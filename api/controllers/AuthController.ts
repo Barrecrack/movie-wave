@@ -1,6 +1,8 @@
 /**
  * @file AuthController.js
- * @description Handles all authentication-related operations - VERSIÓN CON TRIGGER (con logs mejorados)
+ * @description Handles all authentication-related operations such as registration, login,
+ * password recovery, user updates, and account deletion. Integrates Supabase authentication
+ * and database management to ensure user data consistency.
  */
 
 import { supabase } from '../config/supabase';
@@ -10,6 +12,12 @@ import { Request, Response } from 'express';
 
 class AuthController {
 
+   /**
+   * Calculates user's age from their date of birth.
+   * @private
+   * @param {string} birthDate - The user's date of birth (ISO format or YYYY-MM-DD).
+   * @returns {number} The calculated age in years.
+   */
   private calculateAge(birthDate: string): number {
     const today = new Date();
     const birth = new Date(birthDate);
@@ -21,6 +29,12 @@ class AuthController {
     return age;
   }
 
+  /**
+   * Normalizes raw user data from request body into a structured object.
+   * @private
+   * @param {any} body - The raw request body.
+   * @returns {object} The normalized user data with name, lastname, email, password, and birthdate.
+   */
   private normalizeUserData(body: any) {
     return {
       name: body.name,
@@ -32,7 +46,13 @@ class AuthController {
   }
 
   /**
-   * 🔥 Espera a que el trigger cree el usuario en tabla Usuario
+   * Waits for the "Usuario" record to be created by Supabase trigger after signup.
+   * Retries up to a maximum number of attempts.
+   * @private
+   * @async
+   * @param {string} userId - The Supabase Auth user ID.
+   * @param {number} [maxAttempts=10] - Maximum number of attempts before timeout.
+   * @returns {Promise<object|null>} The created user record or null if not found.
    */
   private async waitForUsuarioCreation(userId: string, maxAttempts: number = 10): Promise<any> {
     console.log(`🕒 [waitForUsuarioCreation] Esperando creación de usuario con ID ${userId}...`);
@@ -63,7 +83,12 @@ class AuthController {
   }
 
   /**
-   * REGISTER - Solo registra en Auth, el trigger crea en Usuario
+   * Registers a new user in Supabase Auth and inserts data into "Usuario" table.
+   * Trigger ensures relational consistency between Auth and database.
+   * @async
+   * @param {Request} req - Express request object containing user registration data.
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>}
    */
   async register(req: Request, res: Response) {
     console.log('🟢 [REGISTER] Solicitud recibida con datos:', req.body);
@@ -78,7 +103,6 @@ class AuthController {
 
       console.log('🔹 [REGISTER] Creando usuario en Supabase Auth...');
 
-      // 🔥 MEJORADO: Incluir TODOS los datos en Auth metadata
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -104,7 +128,6 @@ class AuthController {
 
       console.log(`✅ [REGISTER] Usuario ${email} registrado en Auth`);
 
-      // 🔥 MEJORADO: Creación en tabla Usuario con verificación
       console.log('🔹 [REGISTER] Creando usuario en tabla Usuario...');
       const { data: usuarioData, error: usuarioError } = await supabase
         .from('Usuario')
@@ -122,7 +145,6 @@ class AuthController {
       if (usuarioError) {
         console.error('❌ [REGISTER] Error creando en tabla Usuario:', usuarioError.message);
 
-        // 🔥 NUEVO ESTRATEGIA: No podemos eliminar de Auth, pero verificamos si ya existe
         console.log('🔄 [REGISTER] Verificando si el usuario ya existe en tabla Usuario...');
         const { data: existingUser } = await supabase
           .from('Usuario')
@@ -132,7 +154,6 @@ class AuthController {
 
         if (existingUser) {
           console.log('✅ [REGISTER] Usuario ya existe en tabla Usuario (trigger funcionó)');
-          // Usamos el usuario existente
           return res.status(201).json({
             message: 'Usuario registrado exitosamente',
             user: {
@@ -146,7 +167,6 @@ class AuthController {
             token: authData.session?.access_token
           });
         } else {
-          // Si no existe y falló la inserción, informamos el error
           return res.status(400).json({
             error: 'Error al crear perfil de usuario. Intente nuevamente.'
           });
@@ -155,7 +175,7 @@ class AuthController {
 
       console.log('✅ [REGISTER] Usuario creado en tabla Usuario correctamente');
 
-      // 🔥 MEJORADO: Devolver datos desde tabla Usuario
+
       res.status(201).json({
         message: 'Usuario registrado exitosamente',
         user: {
@@ -176,7 +196,11 @@ class AuthController {
   }
 
   /**
-   * LOGIN - Versión simplificada con trigger
+   * Logs in a user using email and password, validating data from both Auth and Usuario.
+   * @async
+   * @param {Request} req - Express request containing email and password.
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>}
    */
   async login(req: Request, res: Response) {
     console.log('🟢 [LOGIN] Intento de inicio de sesión:', req.body);
@@ -209,7 +233,6 @@ class AuthController {
         return res.status(404).json({ error: 'Usuario no encontrado en base de datos' });
       }
 
-      // 🔥 NUEVO: Verificar sincronización entre Auth y Usuario
       console.log('🔍 [LOGIN] Verificando sincronización Auth-Usuario...');
       const authMetadata = data.user.user_metadata;
       console.log('   Auth metadata:', authMetadata);
@@ -228,7 +251,7 @@ class AuthController {
           lastname: usuarioData.apellido,
           email: usuarioData.correo,
           birthdate: usuarioData.edad,
-          age: this.calculateAge(usuarioData.edad)  // 🔥 NUEVO: Incluir edad calculada
+          age: this.calculateAge(usuarioData.edad)
         },
         session: data.session,
         token: data.session?.access_token,
@@ -241,7 +264,11 @@ class AuthController {
   }
 
   /**
-   * GET USER PROFILE
+   * Retrieves the authenticated user's profile using the provided token.
+   * @async
+   * @param {Request} req - Express request with Bearer token in headers.
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>}
    */
   async getUserProfile(req: Request, res: Response) {
     console.log('🟢 [GET USER PROFILE] Solicitud recibida');
@@ -291,7 +318,11 @@ class AuthController {
   }
 
   /**
-   * UPDATE USER
+   * Updates user data in both Supabase Auth and Usuario table.
+   * @async
+   * @param {Request} req - Express request containing updated fields (name, lastname, email, birthdate).
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>}
    */
   async updateUser(req: Request, res: Response) {
     console.log('🟢 [UPDATE USER] Solicitud recibida');
@@ -312,7 +343,6 @@ class AuthController {
       const { name, lastname, email, birthdate } = req.body;
       console.log(`🔹 [UPDATE USER] Actualizando datos para: ${user.email}`);
 
-      // 🔥 MEJORADO: Incluir birthdate en Auth metadata también
       const authUpdates: any = {};
       if (email) authUpdates.email = email;
       if (name || lastname || birthdate) {
@@ -320,7 +350,7 @@ class AuthController {
           ...(user.user_metadata || {}),
           ...(name && { nombre: name }),
           ...(lastname && { apellido: lastname }),
-          ...(birthdate && { edad: birthdate }),  // 🔥 NUEVO: Sincronizar birthdate
+          ...(birthdate && { edad: birthdate }),
         };
       }
 
@@ -365,7 +395,11 @@ class AuthController {
   }
 
   /**
-   * FORGOT PASSWORD
+   * Sends a password recovery email with a signed JWT token.
+   * @async
+   * @param {Request} req - Express request containing user email.
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>}
    */
   async forgotPassword(req: Request, res: Response) {
     console.log('🟢 [FORGOT PASSWORD] Solicitud recibida:', req.body);
@@ -402,7 +436,11 @@ class AuthController {
   }
 
   /**
-   * RESET PASSWORD
+   * Resets a user's password using a JWT recovery token.
+   * @async
+   * @param {Request} req - Express request containing token and newPassword.
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>}
    */
   async resetPassword(req: Request, res: Response) {
     console.log('🟢 [RESET PASSWORD] Solicitud recibida');
@@ -424,7 +462,6 @@ class AuthController {
 
       console.log(`📧 [RESET PASSWORD] Token válido, email: ${email}`);
 
-      // 🔥 USAR DIRECTAMENTE SUPABASE AUTH PARA RESET
       const { error: resetError } = await supabase.auth.updateUser({
         password: newPassword
       });
@@ -452,7 +489,11 @@ class AuthController {
   }
 
   /**
-   * DELETE ACCOUNT
+   * Deletes a user's account from both Supabase Auth and all related tables.
+   * @async
+   * @param {Request} req - Express request containing authorization token.
+   * @param {Response} res - Express response object.
+   * @returns {Promise<void>}
    */
   async deleteAccount(req: Request, res: Response) {
     console.log('🟢 [DELETE ACCOUNT] Solicitud recibida');
@@ -470,15 +511,15 @@ class AuthController {
 
       console.log(`🔹 Eliminando cuenta de: ${user.email}`);
 
-      // 1. Eliminar datos relacionados
+      
       await supabase.from('Favoritos').delete().eq('id_usuario', user.id);
       await supabase.from('Historial_Reproduccion').delete().eq('id_usuario', user.id);
       await supabase.from('Calificaciones').delete().eq('id_usuario', user.id);
 
-      // 2. Eliminar de tabla Usuario
+      
       await supabase.from('Usuario').delete().eq('id_usuario', user.id);
 
-      // 3. Desactivar en Auth (cambiar email para liberar el original)
+      
       const newEmail = `deleted_${Date.now()}_${user.id}@moviewave.com`;
       await supabase.auth.admin.updateUserById(user.id, {
         email: newEmail,
