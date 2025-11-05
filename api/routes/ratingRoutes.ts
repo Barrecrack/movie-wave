@@ -6,9 +6,14 @@ console.log('🚀 [RatingRoutes] Inicializando rutas de calificaciones...');
 
 const router = express.Router();
 
-/* ──────────────────────────────────────────────── */
-/* 🔹 FUNCIÓN: Obtener UUID del usuario desde token */
-/* ──────────────────────────────────────────────── */
+/**
+ * Retrieves the UUID of the authenticated user using a Supabase auth token.
+ * 
+ * @async
+ * @function getUserIdFromAuth
+ * @param {string} token - Bearer token from the request header.
+ * @returns {Promise<string|null>} The user UUID if valid, otherwise null.
+ */
 async function getUserIdFromAuth(token: string): Promise<string | null> {
   console.log('🔑 [AUTH] Verificando token del usuario...');
   try {
@@ -24,9 +29,14 @@ async function getUserIdFromAuth(token: string): Promise<string | null> {
   }
 }
 
-/* ──────────────────────────────────────────────── */
-/* 🔸 RUTA: Agregar/Actualizar calificación         */
-/* ──────────────────────────────────────────────── */
+/**
+ * @route POST /
+ * @description Adds or updates a user rating for a specific video content.
+ * @access Private
+ * @param {string} id_contenido - External content ID (e.g. Pexels video ID).
+ * @param {number} [puntuacion] - Rating value between 1 and 5.
+ * @param {string} [comentario] - Optional user comment.
+ */
 router.post('/', async (req: Request, res: Response) => {
   console.log('➡️ [ADD RATING] Petición para agregar calificación:', req.body);
 
@@ -190,9 +200,11 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-/* ──────────────────────────────────────────────── */
-/* 🔸 RUTA: Obtener calificación del usuario        */
-/* ──────────────────────────────────────────────── */
+/**
+ * @route GET /user/:contentId
+ * @description Retrieves a specific user's rating for a given content.
+ * @access Private
+ */
 router.get('/user/:contentId', async (req: Request, res: Response) => {
   console.log('➡️ [GET USER RATING] Verificando calificación del usuario:', req.params);
 
@@ -234,9 +246,12 @@ router.get('/user/:contentId', async (req: Request, res: Response) => {
   }
 });
 
-/* ──────────────────────────────────────────────── */
-/* 🔸 RUTA: Obtener calificaciones del usuario      */
-/* ──────────────────────────────────────────────── */
+
+/**
+ * @route GET /my-ratings
+ * @description Retrieves all ratings made by the authenticated user.
+ * @access Private
+ */
 router.get('/my-ratings', async (req: Request, res: Response) => {
   console.log('➡️ [GET MY RATINGS] Petición recibida para obtener calificaciones del usuario');
 
@@ -277,9 +292,11 @@ router.get('/my-ratings', async (req: Request, res: Response) => {
   }
 });
 
-/* ──────────────────────────────────────────────── */
-/* 🔸 RUTA: Obtener calificaciones de un contenido  */
-/* ──────────────────────────────────────────────── */
+/**
+ * @route GET /content/:contentId
+ * @description Retrieves all ratings for a specific content.
+ * @access Public
+ */
 router.get('/content/:contentId', async (req: Request, res: Response) => {
   console.log('➡️ [GET CONTENT RATINGS] Petición recibida para calificaciones del contenido:', req.params);
 
@@ -315,9 +332,11 @@ router.get('/content/:contentId', async (req: Request, res: Response) => {
   }
 });
 
-/* ──────────────────────────────────────────────── */
-/* 🔸 RUTA: Eliminar calificación                   */
-/* ──────────────────────────────────────────────── */
+/**
+ * @route DELETE /:contentId
+ * @description Deletes a user's rating for a given content.
+ * @access Private
+ */
 router.delete('/:contentId', async (req: Request, res: Response) => {
   console.log('➡️ [DELETE RATING] Petición recibida:', req.params);
 
@@ -362,9 +381,12 @@ router.delete('/:contentId', async (req: Request, res: Response) => {
   }
 });
 
-/* ──────────────────────────────────────────────── */
-/* 🔧 Utilidades                                    */
-/* ──────────────────────────────────────────────── */
+/**
+ * Generates a random UUID v4.
+ * 
+ * @function generateUUID
+ * @returns {string} Randomly generated UUID.
+ */
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     const r = Math.random() * 16 | 0;
